@@ -1,4 +1,4 @@
-# MCPTest
+# MCPProbe
 
 A Go application for testing MCP (Model Context Protocol) servers. This tool connects to MCP servers using either HTTP or SSE transport modes, performs the initialization handshake, and reports on the server's capabilities including tools, resources, and prompts.
 
