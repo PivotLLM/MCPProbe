@@ -44,12 +44,12 @@ go build -o mcp-probe
 
 #### Test an HTTP MCP Server with Custom Headers
 ```bash
-./mcp-probe -url "http://localhost:8000/mcp" -transport http -headers "Authorization:Bearer token123,Content-Type:application/json"
+./mcp-probe -url http://localhost:8000/mcp -transport http -headers "Authorization:Bearer token123,Content-Type:application/json"
 ```
 
 #### Test with Custom Timeout
 ```bash
-./mcp-probe -url "http://localhost:8000/sse" -timeout 60s
+./mcp-probe -url http://localhost:8000/sse -timeout 60s
 ```
 
 ## Output
