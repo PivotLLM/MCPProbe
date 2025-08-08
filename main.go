@@ -640,7 +640,18 @@ func interactiveMode(ctx context.Context, mcpClient *client.Client, verbose bool
 			break
 		}
 		
-		command := strings.TrimSpace(scanner.Text())
+		input := strings.TrimSpace(scanner.Text())
+		if input == "" {
+			continue
+		}
+		
+		// Split command and arguments
+		parts := strings.Fields(input)
+		command := parts[0]
+		var args []string
+		if len(parts) > 1 {
+			args = parts[1:]
+		}
 		
 		switch command {
 		case "exit", "quit", "q":
@@ -651,20 +662,31 @@ func interactiveMode(ctx context.Context, mcpClient *client.Client, verbose bool
 		case "list", "ls", "l":
 			listToolsInteractive(toolsResult.Tools)
 		case "call", "c":
-			if err := callToolInteractive(ctx, mcpClient, toolsResult.Tools, scanner, verbose); err != nil {
-				fmt.Printf("Error: %v\n", err)
-			}
-		default:
-			if command != "" {
-				// Try to interpret as a tool number
-				if num, err := strconv.Atoi(command); err == nil && num > 0 && num <= len(toolsResult.Tools) {
+			// Handle "call 3" or "c 3" syntax
+			if len(args) > 0 {
+				if num, err := strconv.Atoi(args[0]); err == nil && num > 0 && num <= len(toolsResult.Tools) {
 					tool := toolsResult.Tools[num-1]
 					if err := callToolDirectly(ctx, mcpClient, &tool, scanner, verbose); err != nil {
 						fmt.Printf("Error: %v\n", err)
 					}
 				} else {
-					fmt.Printf("Unknown command: %s (type 'help' for commands)\n", command)
+					fmt.Printf("Invalid tool number: %s\n", args[0])
 				}
+			} else {
+				// No arguments, show guided selection
+				if err := callToolInteractive(ctx, mcpClient, toolsResult.Tools, scanner, verbose); err != nil {
+					fmt.Printf("Error: %v\n", err)
+				}
+			}
+		default:
+			// Try to interpret as a tool number
+			if num, err := strconv.Atoi(command); err == nil && num > 0 && num <= len(toolsResult.Tools) {
+				tool := toolsResult.Tools[num-1]
+				if err := callToolDirectly(ctx, mcpClient, &tool, scanner, verbose); err != nil {
+					fmt.Printf("Error: %v\n", err)
+				}
+			} else {
+				fmt.Printf("Unknown command: %s (type 'help' for commands)\n", command)
 			}
 		}
 	}
@@ -680,8 +702,9 @@ func interactiveMode(ctx context.Context, mcpClient *client.Client, verbose bool
 func printInteractiveHelp() {
 	fmt.Println("\nAvailable commands:")
 	fmt.Println("  list, ls, l     - List available tools")
-	fmt.Println("  call, c         - Call a tool (guided)")
-	fmt.Println("  <number>        - Call tool by number directly")
+	fmt.Println("  call, c         - Call a tool (guided selection)")
+	fmt.Println("  call 3, c 3     - Call tool number 3 directly")
+	fmt.Println("  3               - Call tool number 3 directly")
 	fmt.Println("  help, h, ?      - Show this help")
 	fmt.Println("  exit, quit, q   - Exit interactive mode")
 }
