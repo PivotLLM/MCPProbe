@@ -61,9 +61,9 @@ func main() {
 	fmt.Printf("Timeout: %s\n", *timeout)
 	fmt.Println()
 
-	// Create context with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
-	defer cancel()
+	// Create context with timeout for initial connection and setup
+	initCtx, initCancel := context.WithTimeout(context.Background(), *timeout)
+	defer initCancel()
 
 	// Parse headers
 	headerMap := parseHeaders(*headers)
@@ -96,7 +96,7 @@ func main() {
 
 	// Start the client connection
 	fmt.Println("Starting client connection...")
-	if err := mcpClient.Start(ctx); err != nil {
+	if err := mcpClient.Start(initCtx); err != nil {
 		log.Fatalf("Failed to start client: %v", err)
 	}
 	fmt.Println("Client connection started successfully")
@@ -113,28 +113,35 @@ func main() {
 
 	// Perform initialization handshake
 	fmt.Println("\nPerforming initialization handshake...")
-	if err := performInitialization(ctx, mcpClient, *verbose); err != nil {
+	if err := performInitialization(initCtx, mcpClient, *verbose); err != nil {
 		log.Fatalf("Failed to initialize: %v", err)
 	}
 	fmt.Println("\nInitialization completed successfully")
 
-	// Handle different execution modes
+	// Handle different execution modes with fresh contexts
 	switch {
 	case *listOnly:
+		ctx, cancel := context.WithTimeout(context.Background(), *timeout)
+		defer cancel()
 		if err := listToolsOnly(ctx, mcpClient, *verbose); err != nil {
 			log.Fatalf("Failed to list tools: %v", err)
 		}
 	case *callTool != "":
+		ctx, cancel := context.WithTimeout(context.Background(), *timeout)
+		defer cancel()
 		if err := callSpecificTool(ctx, mcpClient, *callTool, *toolParams, *verbose); err != nil {
 			handleToolCallError(err, *callTool)
 			os.Exit(1)
 		}
 	case *interactive:
-		if err := interactiveMode(ctx, mcpClient, *verbose); err != nil {
+		// Interactive mode manages its own contexts for each tool call
+		if err := interactiveModeWithTimeout(mcpClient, *timeout, *verbose); err != nil {
 			log.Fatalf("Interactive mode failed: %v", err)
 		}
 	default:
 		// Default behavior: test server capabilities
+		ctx, cancel := context.WithTimeout(context.Background(), *timeout)
+		defer cancel()
 		if err := testServerCapabilities(ctx, mcpClient, *verbose); err != nil {
 			log.Fatalf("Failed to test capabilities: %v", err)
 		}
@@ -608,8 +615,8 @@ func listToolsOnly(ctx context.Context, mcpClient *client.Client, verbose bool) 
 	return nil
 }
 
-// interactiveMode provides an interactive interface for tool calling
-func interactiveMode(ctx context.Context, mcpClient *client.Client, verbose bool) error {
+// interactiveModeWithTimeout provides an interactive interface for tool calling with timeout management
+func interactiveModeWithTimeout(mcpClient *client.Client, timeout time.Duration, verbose bool) error {
 	fmt.Println("\n=== Interactive Tool Calling Mode ===")
 	fmt.Println("Type 'help' for commands, 'exit' to quit")
 	
@@ -620,9 +627,11 @@ func interactiveMode(ctx context.Context, mcpClient *client.Client, verbose bool
 		return nil
 	}
 	
-	// Get list of available tools
+	// Get list of available tools with fresh context
+	listCtx, listCancel := context.WithTimeout(context.Background(), timeout)
+	defer listCancel()
 	toolsRequest := mcp.ListToolsRequest{}
-	toolsResult, err := mcpClient.ListTools(ctx, toolsRequest)
+	toolsResult, err := mcpClient.ListTools(listCtx, toolsRequest)
 	if err != nil {
 		return fmt.Errorf("failed to list tools: %w", err)
 	}
@@ -666,7 +675,7 @@ func interactiveMode(ctx context.Context, mcpClient *client.Client, verbose bool
 			if len(args) > 0 {
 				if num, err := strconv.Atoi(args[0]); err == nil && num > 0 && num <= len(toolsResult.Tools) {
 					tool := toolsResult.Tools[num-1]
-					if err := callToolDirectly(ctx, mcpClient, &tool, scanner, verbose); err != nil {
+					if err := callToolDirectlyWithTimeout(mcpClient, &tool, scanner, timeout, verbose); err != nil {
 						fmt.Printf("Error: %v\n", err)
 					}
 				} else {
@@ -674,7 +683,7 @@ func interactiveMode(ctx context.Context, mcpClient *client.Client, verbose bool
 				}
 			} else {
 				// No arguments, show guided selection
-				if err := callToolInteractive(ctx, mcpClient, toolsResult.Tools, scanner, verbose); err != nil {
+				if err := callToolInteractiveWithTimeout(mcpClient, toolsResult.Tools, scanner, timeout, verbose); err != nil {
 					fmt.Printf("Error: %v\n", err)
 				}
 			}
@@ -682,7 +691,7 @@ func interactiveMode(ctx context.Context, mcpClient *client.Client, verbose bool
 			// Try to interpret as a tool number
 			if num, err := strconv.Atoi(command); err == nil && num > 0 && num <= len(toolsResult.Tools) {
 				tool := toolsResult.Tools[num-1]
-				if err := callToolDirectly(ctx, mcpClient, &tool, scanner, verbose); err != nil {
+				if err := callToolDirectlyWithTimeout(mcpClient, &tool, scanner, timeout, verbose); err != nil {
 					fmt.Printf("Error: %v\n", err)
 				}
 			} else {
@@ -721,8 +730,8 @@ func listToolsInteractive(tools []mcp.Tool) {
 	}
 }
 
-// callToolInteractive calls a tool in interactive mode with guided selection
-func callToolInteractive(ctx context.Context, mcpClient *client.Client, tools []mcp.Tool, scanner *bufio.Scanner, verbose bool) error {
+// callToolInteractiveWithTimeout calls a tool in interactive mode with guided selection and timeout management
+func callToolInteractiveWithTimeout(mcpClient *client.Client, tools []mcp.Tool, scanner *bufio.Scanner, timeout time.Duration, verbose bool) error {
 	// List tools
 	listToolsInteractive(tools)
 	
@@ -743,6 +752,15 @@ func callToolInteractive(ctx context.Context, mcpClient *client.Client, tools []
 	}
 	
 	tool := &tools[toolNum-1]
+	return callToolDirectlyWithTimeout(mcpClient, tool, scanner, timeout, verbose)
+}
+
+// callToolDirectlyWithTimeout calls a specific tool with parameter collection and timeout management
+func callToolDirectlyWithTimeout(mcpClient *client.Client, tool *mcp.Tool, scanner *bufio.Scanner, timeout time.Duration, verbose bool) error {
+	// Create fresh context for this tool call
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	
 	return callToolDirectly(ctx, mcpClient, tool, scanner, verbose)
 }
 
