@@ -61,8 +61,18 @@ func main() {
 	fmt.Printf("Timeout: %s\n", *timeout)
 	fmt.Println()
 
-	// Create context with timeout for initial connection and setup
-	initCtx, initCancel := context.WithTimeout(context.Background(), *timeout)
+	// Create appropriate context based on mode
+	var initCtx context.Context
+	var initCancel context.CancelFunc
+	
+	if *interactive {
+		// For interactive mode, use background context to keep connection alive
+		initCtx = context.Background()
+		initCancel = func() {} // No-op cancel function
+	} else {
+		// For non-interactive modes, use timeout context
+		initCtx, initCancel = context.WithTimeout(context.Background(), *timeout)
+	}
 	defer initCancel()
 
 	// Parse headers
@@ -118,7 +128,7 @@ func main() {
 	}
 	fmt.Println("\nInitialization completed successfully")
 
-	// Handle different execution modes with fresh contexts
+	// Handle different execution modes with appropriate context management
 	switch {
 	case *listOnly:
 		ctx, cancel := context.WithTimeout(context.Background(), *timeout)
@@ -135,6 +145,7 @@ func main() {
 		}
 	case *interactive:
 		// Interactive mode manages its own contexts for each tool call
+		// Connection uses background context to stay alive indefinitely
 		if err := interactiveModeWithTimeout(mcpClient, *timeout, *verbose); err != nil {
 			log.Fatalf("Interactive mode failed: %v", err)
 		}
