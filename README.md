@@ -7,6 +7,8 @@ A Go application for testing MCP (Model Context Protocol) servers. This tool con
 - **Multiple Transport Modes**: Supports both HTTP and SSE (Server-Sent Events) connections
 - **Initialization Handshake**: Performs proper MCP protocol initialization
 - **Capability Discovery**: Reports on server capabilities (tools, resources, prompts)
+- **Tool Calling**: Execute MCP tools directly from the command line with parameters
+- **Interactive Mode**: Guided tool calling interface for exploration and testing
 - **Detailed Listing**: Lists all available tools, resources, and prompts with descriptions
 - **Verbose Output**: Provides detailed information about the connection and server responses
 - **Custom Headers**: Supports custom HTTP headers for authentication or other purposes
@@ -34,13 +36,44 @@ go build -o mcp-probe
 - `-headers string`: HTTP headers in format 'key1:value1,key2:value2'
 - `-timeout duration`: Connection timeout (default 30s)
 - `-verbose`: Enable verbose output (default true)
+- `-call string`: Name of the tool to call
+- `-params string`: JSON string of parameters for the tool call (default "{}")
+- `-list-only`: Only list available tools, don't test capabilities
+- `-interactive`: Interactive mode for tool calling
 
 ### Examples
 
-#### Test an SSE MCP Server
+#### Test an SSE MCP Server (Default Behavior)
 ```bash
 ./mcp-probe -url http://localhost:8000/sse -transport sse
 ```
+
+#### List Available Tools Only
+```bash
+./mcp-probe -url http://localhost:8000/sse -list-only
+```
+
+#### Call a Specific Tool with Parameters
+```bash
+# Simple tool call without parameters
+./mcp-probe -url http://localhost:8000/sse -call "get_time"
+
+# Tool call with JSON parameters
+./mcp-probe -url http://localhost:8000/sse -call "calculate" -params '{"operation":"add","x":5,"y":3}'
+
+# Complex tool call with nested parameters
+./mcp-probe -url http://localhost:8000/sse -call "search" -params '{"query":"test","filters":{"type":"document","date":"2025"}}'
+```
+
+#### Interactive Mode for Tool Testing
+```bash
+./mcp-probe -url http://localhost:8000/sse -interactive
+```
+In interactive mode, you can:
+- List available tools with `list` or `ls`
+- Call tools by number or use `call` for guided selection
+- Enter parameters interactively with type hints
+- Exit with `exit` or `quit`
 
 #### Test an HTTP MCP Server with Custom Headers
 ```bash
