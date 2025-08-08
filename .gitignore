@@ -9,10 +9,12 @@
 bin/
 vendor/
 private/
-.idea
-.idea/*
+.idea/
 .vs
 .env
 *.log
+.claude
+CLAUDE.md
 mcpprobe
 MCPProbe
+mcp-probe

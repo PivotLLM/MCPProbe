@@ -1,6 +1,6 @@
 # MCPProbe
 
-A comprehensive Go application for testing and interacting with MCP (Model Context Protocol) servers. MCPProbe not only discovers server capabilities but also provides full tool calling functionality, allowing you to execute MCP tools directly from the command line with parameters and see their responses.
+This utility is for testing MCP (Model Context Protocol) servers. MCPProbe enumerates server capabilities and provides full tool calling functionality, allowing you to execute MCP tools directly from the command line and see their responses.
 
 ## Features
 
@@ -9,7 +9,6 @@ A comprehensive Go application for testing and interacting with MCP (Model Conte
 - **Capability Discovery**: Reports on server capabilities (tools, resources, prompts)
 - **Tool Calling**: Execute MCP tools directly from the command line with parameters
 - **Interactive Mode**: Guided tool calling interface for exploration and testing
-- **Detailed Listing**: Lists all available tools, resources, and prompts with descriptions
 - **Verbose Output**: Provides detailed information about the connection and server responses
 - **Custom Headers**: Supports custom HTTP headers for authentication or other purposes
 
@@ -22,9 +21,6 @@ cd MCPProbe
 
 # Build the application
 go build -o mcp-probe
-
-# Or run directly without building
-go run main.go -url <server-url> [options]
 ```
 
 ## Quick Start
