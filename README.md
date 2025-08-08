@@ -114,7 +114,7 @@ Provides a guided interface for exploring and testing tools.
 
 ```bash
 # Call a tool without parameters
-./mcp-probe -url http://localhost:8000/sse -call "get_current_time"
+./mcp-probe -url http://localhost:8000/sse -call "get_time"
 
 # Call with simple parameters
 ./mcp-probe -url http://localhost:8000/sse \
