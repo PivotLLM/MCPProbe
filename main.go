@@ -567,11 +567,18 @@ func handleToolCallError(err error, toolName string) {
 	switch {
 	case strings.Contains(errStr, "not found"):
 		fmt.Printf("   Tool '%s' not found. Use -list-only to see available tools.\n", toolName)
+	case strings.Contains(errStr, "parameter") && strings.Contains(errStr, "required"):
+		fmt.Printf("   Parameter validation error: %v\n", err)
+		fmt.Printf("   The server requires parameters that weren't provided.\n")
+		fmt.Printf("   💡 This may indicate the tool schema doesn't correctly mark required parameters.\n")
+		fmt.Printf("   💡 Try calling the tool again and provide values for parameters that seem required.\n")
 	case strings.Contains(errStr, "parameter"):
 		fmt.Printf("   Parameter error: %v\n", err)
 		fmt.Printf("   Check parameter format and required fields.\n")
 	case strings.Contains(errStr, "timeout"):
 		fmt.Printf("   Request timed out. Try increasing the timeout with -timeout flag.\n")
+	case strings.Contains(errStr, "Invalid session ID"):
+		fmt.Printf("   Session expired. Please restart MCPProbe.\n")
 	default:
 		fmt.Printf("   %v\n", err)
 	}
@@ -613,6 +620,23 @@ func listToolsOnly(ctx context.Context, mcpClient *client.Client, verbose bool) 
 				lines := strings.Split(string(schemaJSON), "\n")
 				for _, line := range lines {
 					fmt.Printf("   %s\n", line)
+				}
+				
+				// Show required parameters if any
+				var schemaMap map[string]interface{}
+				if err := json.Unmarshal(schemaJSON, &schemaMap); err == nil {
+					if reqArray, ok := schemaMap["required"].([]interface{}); ok && len(reqArray) > 0 {
+						fmt.Printf("   📋 Schema Required Parameters: ")
+						var reqList []string
+						for _, req := range reqArray {
+							if reqStr, ok := req.(string); ok {
+								reqList = append(reqList, reqStr)
+							}
+						}
+						fmt.Printf("%v\n", reqList)
+					} else {
+						fmt.Printf("   📋 Schema Required Parameters: none\n")
+					}
 				}
 				fmt.Println()
 			}
@@ -853,6 +877,13 @@ func collectToolParameters(tool *mcp.Tool, scanner *bufio.Scanner) (map[string]i
 		}
 	}
 	
+	// Debug: Show schema information in verbose mode
+	if len(required) > 0 {
+		fmt.Printf("Schema indicates required parameters: %v\n", getRequiredParamsList(required))
+	} else {
+		fmt.Println("Schema indicates no required parameters")
+	}
+	
 	fmt.Println("\nParameter input:")
 	fmt.Println("• Required parameters must have a value")
 	fmt.Println("• Optional parameters can be skipped by pressing Enter")
@@ -961,4 +992,13 @@ func collectToolParameters(tool *mcp.Tool, scanner *bufio.Scanner) (map[string]i
 	}
 	
 	return params, nil
+}
+
+// getRequiredParamsList returns a slice of required parameter names for display
+func getRequiredParamsList(required map[string]bool) []string {
+	var list []string
+	for param := range required {
+		list = append(list, param)
+	}
+	return list
 }
