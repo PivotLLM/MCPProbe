@@ -853,7 +853,10 @@ func collectToolParameters(tool *mcp.Tool, scanner *bufio.Scanner) (map[string]i
 		}
 	}
 	
-	fmt.Println("\nEnter parameters (press Enter to skip optional parameters):")
+	fmt.Println("\nParameter input:")
+	fmt.Println("• Required parameters must have a value")
+	fmt.Println("• Optional parameters can be skipped by pressing Enter")
+	fmt.Println()
 	
 	// Collect each parameter
 	for propName, propSchema := range properties {
@@ -871,6 +874,8 @@ func collectToolParameters(tool *mcp.Tool, scanner *bufio.Scanner) (map[string]i
 		requiredStr := ""
 		if required[propName] {
 			requiredStr = " [required]"
+		} else {
+			requiredStr = " [optional]"
 		}
 		
 		fmt.Printf("  %s%s%s (type: %s): ", propName, description, requiredStr, propType)
@@ -881,9 +886,23 @@ func collectToolParameters(tool *mcp.Tool, scanner *bufio.Scanner) (map[string]i
 		
 		input := strings.TrimSpace(scanner.Text())
 		
-		// Skip if empty and not required
-		if input == "" && !required[propName] {
-			continue
+		// Handle empty input
+		if input == "" {
+			if required[propName] {
+				fmt.Printf("    ❌ This parameter is required. Please enter a value.\n")
+				fmt.Printf("  %s%s%s (type: %s): ", propName, description, requiredStr, propType)
+				if !scanner.Scan() {
+					return params, nil
+				}
+				input = strings.TrimSpace(scanner.Text())
+				if input == "" {
+					return nil, fmt.Errorf("required parameter '%s' cannot be empty", propName)
+				}
+			} else {
+				// Optional parameter, skip it
+				fmt.Printf("    ✓ Skipped (optional)\n")
+				continue
+			}
 		}
 		
 		// Parse based on type
@@ -892,23 +911,30 @@ func collectToolParameters(tool *mcp.Tool, scanner *bufio.Scanner) (map[string]i
 			if num, err := strconv.ParseFloat(input, 64); err == nil {
 				if propType == "integer" {
 					params[propName] = int(num)
+					fmt.Printf("    ✓ Set to: %d\n", int(num))
 				} else {
 					params[propName] = num
+					fmt.Printf("    ✓ Set to: %g\n", num)
 				}
 			} else {
 				return nil, fmt.Errorf("invalid number for %s: %s", propName, input)
 			}
 		case "boolean":
 			lower := strings.ToLower(input)
-			params[propName] = lower == "true" || lower == "yes" || lower == "y" || lower == "1"
+			value := lower == "true" || lower == "yes" || lower == "y" || lower == "1"
+			params[propName] = value
+			fmt.Printf("    ✓ Set to: %t\n", value)
 		case "array":
 			// Try to parse as JSON array
 			var arr []interface{}
 			if err := json.Unmarshal([]byte(input), &arr); err != nil {
 				// If not JSON, treat as comma-separated
-				params[propName] = strings.Split(input, ",")
+				splitArr := strings.Split(input, ",")
+				params[propName] = splitArr
+				fmt.Printf("    ✓ Set to: %v (comma-separated)\n", splitArr)
 			} else {
 				params[propName] = arr
+				fmt.Printf("    ✓ Set to: %v (JSON array)\n", arr)
 			}
 		case "object":
 			// Parse as JSON object
@@ -917,9 +943,21 @@ func collectToolParameters(tool *mcp.Tool, scanner *bufio.Scanner) (map[string]i
 				return nil, fmt.Errorf("invalid JSON object for %s: %s", propName, input)
 			}
 			params[propName] = obj
+			fmt.Printf("    ✓ Set to: %v\n", obj)
 		default:
 			params[propName] = input
+			fmt.Printf("    ✓ Set to: \"%s\"\n", input)
 		}
+	}
+	
+	// Show summary of collected parameters
+	if len(params) > 0 {
+		fmt.Printf("\n📋 Parameter summary:\n")
+		for key, value := range params {
+			fmt.Printf("  • %s: %v\n", key, value)
+		}
+	} else {
+		fmt.Printf("\n📋 No parameters provided\n")
 	}
 	
 	return params, nil
