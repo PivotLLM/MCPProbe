@@ -622,22 +622,6 @@ func listToolsOnly(ctx context.Context, mcpClient *client.Client, verbose bool) 
 					fmt.Printf("   %s\n", line)
 				}
 				
-				// Show required parameters if any
-				var schemaMap map[string]interface{}
-				if err := json.Unmarshal(schemaJSON, &schemaMap); err == nil {
-					if reqArray, ok := schemaMap["required"].([]interface{}); ok && len(reqArray) > 0 {
-						fmt.Printf("   📋 Schema Required Parameters: ")
-						var reqList []string
-						for _, req := range reqArray {
-							if reqStr, ok := req.(string); ok {
-								reqList = append(reqList, reqStr)
-							}
-						}
-						fmt.Printf("%v\n", reqList)
-					} else {
-						fmt.Printf("   📋 Schema Required Parameters: none\n")
-					}
-				}
 				fmt.Println()
 			}
 		}
