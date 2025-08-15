@@ -41,7 +41,7 @@ go build -o mcp-probe
 
 ## Usage Modes
 
-MCPProbe operates in four distinct modes:
+MCPProbe operates in four modes:
 
 ### 1. Discovery Mode (Default)
 Tests the MCP server and reports all capabilities (tools, resources, prompts).
@@ -50,7 +50,7 @@ Tests the MCP server and reports all capabilities (tools, resources, prompts).
 ```
 
 ### 2. List-Only Mode
-Quickly lists available tools without running full capability tests.
+Quickly lists available tools:
 ```bash
 ./mcp-probe -url <server-url> -list-only
 ```
@@ -77,11 +77,62 @@ Provides a guided interface for exploring and testing tools.
 | `-params` | JSON string of parameters for tool call | `{}` |
 | `-list-only` | Only list available tools | `false` |
 | `-interactive` | Enable interactive mode | `false` |
-| `-headers` | HTTP headers (format: 'key1:value1,key2:value2') | - |
+| `-headers` | Custom HTTP headers for authentication and other purposes. Format: 'key1:value1,key2:value2'. Common uses: 'Authorization:Bearer TOKEN' for bearer tokens, 'X-API-Key:KEY' for API keys | - |
 | `-timeout` | Connection timeout | `30s` |
 | `-verbose` | Enable verbose output | `true` |
 
 ## Detailed Examples
+
+### Authentication
+
+MCPProbe supports various authentication methods through the `-headers` flag:
+
+#### Bearer Token Authentication
+```bash
+# Bearer token
+./mcp-probe -url http://api.example.com/mcp \
+  -headers "Authorization:Bearer YOUR_TOKEN_HERE"
+```
+
+#### API Key Authentication
+```bash
+# Standard X-API-Key header
+./mcp-probe -url http://api.example.com/mcp \
+  -headers "X-API-Key:sk-1234567890abcdef"
+
+# Custom API key header
+./mcp-probe -url http://api.example.com/mcp \
+  -headers "Api-Token:your-secret-key"
+```
+
+#### Basic Authentication
+```bash
+# Basic auth (base64 encoded username:password)
+./mcp-probe -url http://api.example.com/mcp \
+  -headers "Authorization:Basic dXNlcm5hbWU6cGFzc3dvcmQ="
+```
+
+#### Multiple Headers
+```bash
+# Combine authentication with other headers
+./mcp-probe -url http://api.example.com/mcp \
+  -headers "Authorization:Bearer token123,X-API-Key:backup-key,Content-Type:application/json"
+
+# API key with additional headers
+./mcp-probe -url http://api.example.com/mcp \
+  -headers "X-API-Key:secret,X-Client-ID:myclient,Accept:application/json"
+```
+
+#### Custom Authentication Headers
+```bash
+# Custom authentication scheme
+./mcp-probe -url http://api.example.com/mcp \
+  -headers "X-Custom-Auth:custom-token-format"
+
+# Multiple authentication methods (if server supports fallback)
+./mcp-probe -url http://api.example.com/mcp \
+  -headers "Authorization:Bearer primary-token,X-API-Key:fallback-key"
+```
 
 ### Basic Server Testing
 
@@ -91,10 +142,6 @@ Provides a guided interface for exploring and testing tools.
 
 # Test an HTTP server
 ./mcp-probe -url http://localhost:8000/mcp -transport http
-
-# Test with authentication headers
-./mcp-probe -url http://api.example.com/mcp \
-  -headers "Authorization:Bearer token123,X-API-Key:secret"
 
 # Test with extended timeout for slow servers
 ./mcp-probe -url http://localhost:8000/sse -timeout 60s
@@ -108,6 +155,10 @@ Provides a guided interface for exploring and testing tools.
 
 # List tools with full schema information
 ./mcp-probe -url http://localhost:8000/sse -list-only -verbose
+
+# List tools from authenticated server
+./mcp-probe -url http://api.example.com/mcp -list-only \
+  -headers "Authorization:Bearer YOUR_TOKEN"
 ```
 
 ### Direct Tool Calling
@@ -120,6 +171,18 @@ Provides a guided interface for exploring and testing tools.
 ./mcp-probe -url http://localhost:8000/sse \
   -call "echo" \
   -params '{"message":"Hello, MCP!"}'
+
+# Call with authentication
+./mcp-probe -url http://api.example.com/mcp \
+  -headers "Authorization:Bearer YOUR_TOKEN" \
+  -call "get_user_data" \
+  -params '{"user_id":"12345"}'
+
+# Call with API key authentication
+./mcp-probe -url http://api.example.com/mcp \
+  -headers "X-API-Key:your-api-key" \
+  -call "fetch_records" \
+  -params '{"limit":10}'
 
 # Call with numeric parameters
 ./mcp-probe -url http://localhost:8000/sse \
@@ -142,6 +205,10 @@ Provides a guided interface for exploring and testing tools.
 ```bash
 # Start interactive mode
 ./mcp-probe -url http://localhost:8000/sse -interactive
+
+# Interactive mode with authentication
+./mcp-probe -url http://api.example.com/mcp -interactive \
+  -headers "Authorization:Bearer YOUR_TOKEN"
 ```
 
 #### Interactive Mode Commands:
