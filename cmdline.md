@@ -138,9 +138,9 @@ func formatToolResult(result *mcp.CallToolResult, verbose bool) {
     fmt.Println("\n=== Tool Call Result ===")
     
     if result.IsError {
-        fmt.Printf("❌ Tool call failed:\n")
+        fmt.Printf("Tool call failed:\n")
     } else {
-        fmt.Printf("✅ Tool call succeeded:\n")
+        fmt.Printf("Tool call succeeded:\n")
     }
     
     // Display content with proper formatting
@@ -215,7 +215,7 @@ func collectToolParameters(tool mcp.Tool) (map[string]interface{}, error) {
 
 ```go
 func handleToolCallError(err error, toolName string) {
-    fmt.Printf("❌ Failed to call tool '%s':\n", toolName)
+    fmt.Printf("Failed to call tool '%s':\n", toolName)
     
     // Categorize error types
     switch {

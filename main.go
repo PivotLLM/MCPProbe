@@ -64,7 +64,7 @@ func main() {
 	// Create appropriate context based on mode
 	var initCtx context.Context
 	var initCancel context.CancelFunc
-	
+
 	if *interactive {
 		// For interactive mode, use background context to keep connection alive
 		initCtx = context.Background()
@@ -489,7 +489,7 @@ func parseToolParameters(paramsJSON string) (map[string]interface{}, error) {
 	if paramsJSON == "" || paramsJSON == "{}" {
 		return make(map[string]interface{}), nil
 	}
-	
+
 	if err := json.Unmarshal([]byte(paramsJSON), &params); err != nil {
 		return nil, fmt.Errorf("failed to parse parameters JSON: %w", err)
 	}
@@ -501,7 +501,7 @@ func displayToolRequest(toolName string, params map[string]interface{}, verbose 
 	if !verbose {
 		return
 	}
-	
+
 	fmt.Printf("\n=== Sending Tool Call ===\n")
 	fmt.Printf("Tool: %s\n", toolName)
 	if len(params) > 0 {
@@ -518,13 +518,13 @@ func displayToolRequest(toolName string, params map[string]interface{}, verbose 
 // formatToolResult formats and displays the tool call result
 func formatToolResult(result *mcp.CallToolResult, verbose bool) {
 	fmt.Println("\n=== Tool Call Result ===")
-	
+
 	if result.IsError {
-		fmt.Printf("❌ Tool call failed:\n")
+		fmt.Printf("Tool call failed:\n")
 	} else {
-		fmt.Printf("✅ Tool call succeeded:\n")
+		fmt.Printf("Tool call succeeded:\n")
 	}
-	
+
 	// Display content
 	if len(result.Content) > 0 {
 		for i, content := range result.Content {
@@ -533,7 +533,7 @@ func formatToolResult(result *mcp.CallToolResult, verbose bool) {
 			} else {
 				fmt.Printf("\n")
 			}
-			
+
 			// Handle different content types using type assertion
 			switch c := content.(type) {
 			case mcp.TextContent:
@@ -553,15 +553,15 @@ func formatToolResult(result *mcp.CallToolResult, verbose bool) {
 			}
 		}
 	}
-	
+
 	// Note: StructuredContent field doesn't exist in the current mcp-go version
 	// This functionality may be added in future versions
 }
 
 // handleToolCallError handles errors from tool calls with user-friendly messages
 func handleToolCallError(err error, toolName string) {
-	fmt.Printf("❌ Failed to call tool '%s':\n", toolName)
-	
+	fmt.Printf("Failed to call tool '%s':\n", toolName)
+
 	// Categorize error types
 	errStr := err.Error()
 	switch {
@@ -587,31 +587,31 @@ func handleToolCallError(err error, toolName string) {
 // listToolsOnly lists available tools without running full capability tests
 func listToolsOnly(ctx context.Context, mcpClient *client.Client, verbose bool) error {
 	fmt.Println("\n--- Available Tools ---")
-	
+
 	// Check if tools capability is supported
 	serverCaps := mcpClient.GetServerCapabilities()
 	if serverCaps.Tools == nil {
 		fmt.Println("Tools capability not supported by server")
 		return nil
 	}
-	
+
 	fmt.Println("Requesting list of available tools...")
-	
+
 	toolsRequest := mcp.ListToolsRequest{}
 	toolsResult, err := mcpClient.ListTools(ctx, toolsRequest)
 	if err != nil {
 		return fmt.Errorf("failed to list tools: %w", err)
 	}
-	
+
 	fmt.Printf("\nFound %d tools:\n\n", len(toolsResult.Tools))
-	
+
 	for i, tool := range toolsResult.Tools {
 		fmt.Printf("%d. %s", i+1, tool.Name)
 		if tool.Description != "" && verbose {
 			fmt.Printf(" - %s", tool.Description)
 		}
 		fmt.Println()
-		
+
 		if verbose {
 			// Pretty print the input schema
 			schemaJSON, err := json.MarshalIndent(tool.InputSchema, "   ", "  ")
@@ -621,16 +621,16 @@ func listToolsOnly(ctx context.Context, mcpClient *client.Client, verbose bool) 
 				for _, line := range lines {
 					fmt.Printf("   %s\n", line)
 				}
-				
+
 				fmt.Println()
 			}
 		}
 	}
-	
+
 	if len(toolsResult.Tools) == 0 {
 		fmt.Println("  (No tools available)")
 	}
-	
+
 	return nil
 }
 
@@ -638,14 +638,14 @@ func listToolsOnly(ctx context.Context, mcpClient *client.Client, verbose bool) 
 func interactiveModeWithTimeout(mcpClient *client.Client, timeout time.Duration, verbose bool) error {
 	fmt.Println("\n=== Interactive Tool Calling Mode ===")
 	fmt.Println("Type 'help' for commands, 'exit' to quit")
-	
+
 	// Check if tools capability is supported
 	serverCaps := mcpClient.GetServerCapabilities()
 	if serverCaps.Tools == nil {
 		fmt.Println("Tools capability not supported by server")
 		return nil
 	}
-	
+
 	// Get list of available tools with fresh context
 	listCtx, listCancel := context.WithTimeout(context.Background(), timeout)
 	defer listCancel()
@@ -654,25 +654,25 @@ func interactiveModeWithTimeout(mcpClient *client.Client, timeout time.Duration,
 	if err != nil {
 		return fmt.Errorf("failed to list tools: %w", err)
 	}
-	
+
 	if len(toolsResult.Tools) == 0 {
 		fmt.Println("No tools available on this server")
 		return nil
 	}
-	
+
 	scanner := bufio.NewScanner(os.Stdin)
-	
+
 	for {
 		fmt.Print("\n> ")
 		if !scanner.Scan() {
 			break
 		}
-		
+
 		input := strings.TrimSpace(scanner.Text())
 		if input == "" {
 			continue
 		}
-		
+
 		// Split command and arguments
 		parts := strings.Fields(input)
 		command := parts[0]
@@ -680,7 +680,7 @@ func interactiveModeWithTimeout(mcpClient *client.Client, timeout time.Duration,
 		if len(parts) > 1 {
 			args = parts[1:]
 		}
-		
+
 		switch command {
 		case "exit", "quit", "q":
 			fmt.Println("Exiting interactive mode...")
@@ -718,11 +718,11 @@ func interactiveModeWithTimeout(mcpClient *client.Client, timeout time.Duration,
 			}
 		}
 	}
-	
+
 	if err := scanner.Err(); err != nil {
 		return fmt.Errorf("error reading input: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -753,23 +753,23 @@ func listToolsInteractive(tools []mcp.Tool) {
 func callToolInteractiveWithTimeout(mcpClient *client.Client, tools []mcp.Tool, scanner *bufio.Scanner, timeout time.Duration, verbose bool) error {
 	// List tools
 	listToolsInteractive(tools)
-	
+
 	// Select tool
 	fmt.Print("\nEnter tool number (or 'cancel'): ")
 	if !scanner.Scan() {
 		return nil
 	}
-	
+
 	input := strings.TrimSpace(scanner.Text())
 	if input == "cancel" || input == "" {
 		return nil
 	}
-	
+
 	toolNum, err := strconv.Atoi(input)
 	if err != nil || toolNum < 1 || toolNum > len(tools) {
 		return fmt.Errorf("invalid tool number: %s", input)
 	}
-	
+
 	tool := &tools[toolNum-1]
 	return callToolDirectlyWithTimeout(mcpClient, tool, scanner, timeout, verbose)
 }
@@ -779,7 +779,7 @@ func callToolDirectlyWithTimeout(mcpClient *client.Client, tool *mcp.Tool, scann
 	// Create fresh context for this tool call
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	
+
 	return callToolDirectly(ctx, mcpClient, tool, scanner, verbose)
 }
 
@@ -789,16 +789,16 @@ func callToolDirectly(ctx context.Context, mcpClient *client.Client, tool *mcp.T
 	if tool.Description != "" {
 		fmt.Printf("Description: %s\n", tool.Description)
 	}
-	
+
 	// Collect parameters
 	params, err := collectToolParameters(tool, scanner)
 	if err != nil {
 		return err
 	}
-	
+
 	// Display request in verbose mode
 	displayToolRequest(tool.Name, params, verbose)
-	
+
 	// Create and send the request
 	request := mcp.CallToolRequest{
 		Params: mcp.CallToolParams{
@@ -806,30 +806,30 @@ func callToolDirectly(ctx context.Context, mcpClient *client.Client, tool *mcp.T
 			Arguments: params,
 		},
 	}
-	
+
 	fmt.Printf("\nCalling tool '%s'...\n", tool.Name)
 	result, err := mcpClient.CallTool(ctx, request)
 	if err != nil {
 		return fmt.Errorf("failed to call tool: %w", err)
 	}
-	
+
 	// Display result
 	formatToolResult(result, verbose)
-	
+
 	return nil
 }
 
 // collectToolParameters collects parameters for a tool call interactively
 func collectToolParameters(tool *mcp.Tool, scanner *bufio.Scanner) (map[string]interface{}, error) {
 	params := make(map[string]interface{})
-	
+
 	// Marshal InputSchema to JSON for parsing
 	schemaJSON, err := json.Marshal(tool.InputSchema)
 	if err != nil || string(schemaJSON) == "null" || string(schemaJSON) == "{}" {
 		// No schema or empty schema means no parameters
 		return params, nil
 	}
-	
+
 	// Try to parse the schema as a map
 	var schemaMap map[string]interface{}
 	if err := json.Unmarshal(schemaJSON, &schemaMap); err != nil {
@@ -844,14 +844,14 @@ func collectToolParameters(tool *mcp.Tool, scanner *bufio.Scanner) (map[string]i
 		}
 		return parseToolParameters(input)
 	}
-	
+
 	// Extract properties from schema
 	properties, ok := schemaMap["properties"].(map[string]interface{})
 	if !ok || len(properties) == 0 {
 		fmt.Println("No parameters required for this tool")
 		return params, nil
 	}
-	
+
 	required := make(map[string]bool)
 	if reqArray, ok := schemaMap["required"].([]interface{}); ok {
 		for _, req := range reqArray {
@@ -860,19 +860,19 @@ func collectToolParameters(tool *mcp.Tool, scanner *bufio.Scanner) (map[string]i
 			}
 		}
 	}
-	
+
 	// Debug: Show schema information in verbose mode
 	if len(required) > 0 {
 		fmt.Printf("Schema indicates required parameters: %v\n", getRequiredParamsList(required))
 	} else {
 		fmt.Println("Schema indicates no required parameters")
 	}
-	
+
 	fmt.Println("\nParameter input:")
 	fmt.Println("• Required parameters must have a value")
 	fmt.Println("• Optional parameters can be skipped by pressing Enter")
 	fmt.Println()
-	
+
 	// Collect each parameter
 	for propName, propSchema := range properties {
 		propMap, _ := propSchema.(map[string]interface{})
@@ -880,31 +880,31 @@ func collectToolParameters(tool *mcp.Tool, scanner *bufio.Scanner) (map[string]i
 		if t, ok := propMap["type"].(string); ok {
 			propType = t
 		}
-		
+
 		description := ""
 		if desc, ok := propMap["description"].(string); ok {
 			description = fmt.Sprintf(" (%s)", desc)
 		}
-		
+
 		requiredStr := ""
 		if required[propName] {
 			requiredStr = " [required]"
 		} else {
 			requiredStr = " [optional]"
 		}
-		
+
 		fmt.Printf("  %s%s%s (type: %s): ", propName, description, requiredStr, propType)
-		
+
 		if !scanner.Scan() {
 			return params, nil
 		}
-		
+
 		input := strings.TrimSpace(scanner.Text())
-		
+
 		// Handle empty input
 		if input == "" {
 			if required[propName] {
-				fmt.Printf("    ❌ This parameter is required. Please enter a value.\n")
+				fmt.Printf("    This parameter is required. Please enter a value.\n")
 				fmt.Printf("  %s%s%s (type: %s): ", propName, description, requiredStr, propType)
 				if !scanner.Scan() {
 					return params, nil
@@ -919,7 +919,7 @@ func collectToolParameters(tool *mcp.Tool, scanner *bufio.Scanner) (map[string]i
 				continue
 			}
 		}
-		
+
 		// Parse based on type
 		switch propType {
 		case "number", "integer":
@@ -964,7 +964,7 @@ func collectToolParameters(tool *mcp.Tool, scanner *bufio.Scanner) (map[string]i
 			fmt.Printf("    ✓ Set to: \"%s\"\n", input)
 		}
 	}
-	
+
 	// Show summary of collected parameters
 	if len(params) > 0 {
 		fmt.Printf("\n📋 Parameter summary:\n")
@@ -974,7 +974,7 @@ func collectToolParameters(tool *mcp.Tool, scanner *bufio.Scanner) (map[string]i
 	} else {
 		fmt.Printf("\n📋 No parameters provided\n")
 	}
-	
+
 	return params, nil
 }
 

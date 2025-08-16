@@ -241,7 +241,7 @@ Enter parameters (press Enter to skip optional parameters):
 Calling tool 'echo'...
 
 === Tool Call Result ===
-✅ Tool call succeeded:
+Tool call succeeded:
 
 Hello from interactive mode!
 
@@ -332,14 +332,14 @@ Parameters:
 Calling tool 'calculate'...
 
 === Tool Call Result ===
-✅ Tool call succeeded:
+Tool call succeeded:
 
 The result of 5 + 3 is 8
 ```
 
 ### Error Output
 ```
-❌ Failed to call tool 'nonexistent':
+Failed to call tool 'nonexistent':
    Tool 'nonexistent' not found. Use -list-only to see available tools.
 ```
 
