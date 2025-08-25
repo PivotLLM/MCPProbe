@@ -294,6 +294,63 @@ func testServerCapabilities(ctx context.Context, mcpClient *client.Client, verbo
 	return nil
 }
 
+func formatToolInputSchema(schema mcp.ToolInputSchema, indent string) string {
+	var result strings.Builder
+
+	result.WriteString(fmt.Sprintf("%sType: %s\n", indent, schema.Type))
+
+	if len(schema.Required) > 0 {
+		result.WriteString(fmt.Sprintf("%sRequired: %v\n", indent, schema.Required))
+	} else {
+		result.WriteString(fmt.Sprintf("%sRequired: (none)\n", indent))
+	}
+
+	if len(schema.Properties) > 0 {
+		result.WriteString(fmt.Sprintf("%sProperties:\n", indent))
+		for propName, propValue := range schema.Properties {
+			result.WriteString(fmt.Sprintf("%s  - %s: ", indent, propName))
+
+			// Pretty print the property value
+			if propMap, ok := propValue.(map[string]interface{}); ok {
+				// It's a property definition object
+				if propType, hasType := propMap["type"]; hasType {
+					result.WriteString(fmt.Sprintf("(type: %v", propType))
+					if desc, hasDesc := propMap["description"]; hasDesc {
+						result.WriteString(fmt.Sprintf(", description: %v", desc))
+					}
+					if enum, hasEnum := propMap["enum"]; hasEnum {
+						result.WriteString(fmt.Sprintf(", enum: %v", enum))
+					}
+					if def, hasDef := propMap["default"]; hasDef {
+						result.WriteString(fmt.Sprintf(", default: %v", def))
+					}
+					result.WriteString(")")
+				} else {
+					// Fallback to JSON representation
+					jsonBytes, _ := json.MarshalIndent(propValue, "", "  ")
+					result.WriteString(string(jsonBytes))
+				}
+			} else {
+				// Simple value
+				result.WriteString(fmt.Sprintf("%v", propValue))
+			}
+			result.WriteString("\n")
+		}
+	}
+
+	if len(schema.Defs) > 0 {
+		result.WriteString(fmt.Sprintf("%sDefinitions:\n", indent))
+		for defName, defValue := range schema.Defs {
+			result.WriteString(fmt.Sprintf("%s  - %s: ", indent, defName))
+			jsonBytes, _ := json.MarshalIndent(defValue, indent+"    ", "  ")
+			result.WriteString(string(jsonBytes))
+			result.WriteString("\n")
+		}
+	}
+
+	return result.String()
+}
+
 func testTools(ctx context.Context, mcpClient *client.Client, verbose bool) error {
 	fmt.Println("Requesting list of available tools...")
 
@@ -311,7 +368,10 @@ func testTools(ctx context.Context, mcpClient *client.Client, verbose bool) erro
 			if tool.Description != "" {
 				fmt.Printf("     Description: %s\n", tool.Description)
 			}
-			fmt.Printf("     Input Schema: %v\n\n", tool.InputSchema)
+			fmt.Println("     Input Schema:")
+			schemaOutput := formatToolInputSchema(tool.InputSchema, "       ")
+			fmt.Print(schemaOutput)
+			fmt.Println()
 		}
 	}
 
