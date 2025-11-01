@@ -66,20 +66,6 @@ func main() {
 	fmt.Printf("Timeout: %s\n", *timeout)
 	fmt.Println()
 
-	// Create appropriate context based on mode
-	var initCtx context.Context
-	var initCancel context.CancelFunc
-
-	if *interactive {
-		// For interactive mode, use background context to keep connection alive
-		initCtx = context.Background()
-		initCancel = func() {} // No-op cancel function
-	} else {
-		// For non-interactive modes, use timeout context
-		initCtx, initCancel = context.WithTimeout(context.Background(), *timeout)
-	}
-	defer initCancel()
-
 	// Parse headers
 	headerMap := parseHeaders(*headers)
 	if len(headerMap) > 0 && *verbose {
@@ -109,9 +95,10 @@ func main() {
 		_ = mcpClient.Close()
 	}(mcpClient)
 
-	// Start the client connection
+	// Start the client connection with background context
+	// The SSE/HTTP stream needs to stay alive for the duration of tool calls
 	fmt.Println("Starting client connection...")
-	if err := mcpClient.Start(initCtx); err != nil {
+	if err := mcpClient.Start(context.Background()); err != nil {
 		log.Fatalf("Failed to start client: %v", err)
 	}
 	fmt.Println("Client connection started successfully")
@@ -126,8 +113,10 @@ func main() {
 		}
 	}
 
-	// Perform initialization handshake
+	// Perform initialization handshake with timeout
 	fmt.Println("\nPerforming initialization handshake...")
+	initCtx, initCancel := context.WithTimeout(context.Background(), *timeout)
+	defer initCancel()
 	if err := performInitialization(initCtx, mcpClient, *verbose); err != nil {
 		log.Fatalf("Failed to initialize: %v", err)
 	}
