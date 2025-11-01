@@ -78,7 +78,8 @@ Provides a guided interface for exploring and testing tools.
 | `-list-only` | Only list available tools | `false` |
 | `-interactive` | Enable interactive mode | `false` |
 | `-headers` | Custom HTTP headers for authentication and other purposes. Format: 'key1:value1,key2:value2'. Common uses: 'Authorization:Bearer TOKEN' for bearer tokens, 'X-API-Key:KEY' for API keys | - |
-| `-timeout` | Connection timeout | `30s` |
+| `-timeout` | Connection timeout for initialization and listing | `30s` |
+| `-call-timeout` | Timeout for tool call execution | `300s` (5 minutes) |
 | `-verbose` | Enable verbose output | `true` |
 
 ## Detailed Examples
@@ -198,6 +199,12 @@ MCPProbe supports various authentication methods through the `-headers` flag:
 ./mcp-probe -url http://localhost:8000/sse \
   -call "process_batch" \
   -params '{"items":["item1","item2","item3"],"options":{"parallel":true}}'
+
+# Call with extended timeout for long-running tools
+./mcp-probe -url http://localhost:8000/sse \
+  -call "analyze_large_dataset" \
+  -params '{"dataset_id":"12345"}' \
+  -call-timeout 10m
 ```
 
 ### Interactive Mode
@@ -209,6 +216,9 @@ MCPProbe supports various authentication methods through the `-headers` flag:
 # Interactive mode with authentication
 ./mcp-probe -url http://api.example.com/mcp -interactive \
   -headers "Authorization:Bearer YOUR_TOKEN"
+
+# Interactive mode with extended tool timeout for long operations
+./mcp-probe -url http://localhost:8000/sse -interactive -call-timeout 10m
 ```
 
 #### Interactive Mode Commands:
@@ -369,10 +379,21 @@ Failed to call tool 'nonexistent':
 
 #### Timeout Issues
 ```bash
-# Error: context deadline exceeded
-# Solution: Increase timeout for slow servers
+# Error: context deadline exceeded during initialization/connection
+# Solution: Increase connection timeout for slow servers
 ./mcp-probe -url http://localhost:8000/sse -timeout 60s
+
+# Error: context deadline exceeded during tool call
+# Solution: Increase tool call timeout for long-running tools
+./mcp-probe -url http://localhost:8000/sse -call "long_task" -call-timeout 10m
+
+# Both timeouts can be adjusted independently
+./mcp-probe -url http://localhost:8000/sse -timeout 60s -call-timeout 15m -interactive
 ```
+
+**Understanding Timeouts:**
+- **`-timeout`** (default 30s): Controls connection, initialization, and listing operations
+- **`-call-timeout`** (default 300s/5m): Controls how long tool execution can run
 
 ### Debugging Tips
 

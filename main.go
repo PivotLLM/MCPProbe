@@ -10,6 +10,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -26,7 +27,8 @@ func main() {
 		serverURL   = flag.String("url", "", "MCP server URL (required)")
 		mode        = flag.String("transport", "sse", "Transport mode: 'sse' or 'http'")
 		headers     = flag.String("headers", "", "HTTP headers in format 'key1:value1,key2:value2'")
-		timeout     = flag.Duration("timeout", 30*time.Second, "Connection timeout")
+		timeout     = flag.Duration("timeout", 30*time.Second, "Connection timeout for initialization and listing")
+		callTimeout = flag.Duration("call-timeout", 300*time.Second, "Timeout for tool call execution")
 		verbose     = flag.Bool("verbose", true, "Enable verbose output")
 		callTool    = flag.String("call", "", "Name of the tool to call")
 		toolParams  = flag.String("params", "{}", "JSON string of parameters for the tool call")
@@ -43,9 +45,12 @@ func main() {
 		fmt.Println("  List available tools only:")
 		fmt.Println("    go run main.go -url <server-url> -list-only")
 		fmt.Println("  Call a specific tool:")
-		fmt.Println("    go run main.go -url <server-url> -call <tool-name> -params '<json>'")
+		fmt.Println("    go run main.go -url <server-url> -call <tool-name> -params '<json>' [-call-timeout 300s]")
 		fmt.Println("  Interactive tool calling:")
-		fmt.Println("    go run main.go -url <server-url> -interactive")
+		fmt.Println("    go run main.go -url <server-url> -interactive [-call-timeout 300s]")
+		fmt.Println("\nTimeout options:")
+		fmt.Println("  -timeout:      Connection/initialization timeout (default: 30s)")
+		fmt.Println("  -call-timeout: Tool execution timeout (default: 300s)")
 		os.Exit(1)
 	}
 
@@ -88,10 +93,10 @@ func main() {
 	switch strings.ToLower(*mode) {
 	case "sse":
 		fmt.Println("Creating SSE client...")
-		mcpClient, err = createSSEClient(*serverURL, headerMap)
+		mcpClient, err = createSSEClient(*serverURL, headerMap, *callTimeout)
 	case "http":
 		fmt.Println("Creating HTTP client...")
-		mcpClient, err = createHTTPClient(*serverURL, headerMap)
+		mcpClient, err = createHTTPClient(*serverURL, headerMap, *callTimeout)
 	default:
 		fmt.Printf("Error: Unsupported transport type '%s'. Use 'sse' or 'http'\n", *mode)
 		os.Exit(1)
@@ -137,7 +142,7 @@ func main() {
 			log.Fatalf("Failed to list tools: %v", err)
 		}
 	case *callTool != "":
-		ctx, cancel := context.WithTimeout(context.Background(), *timeout)
+		ctx, cancel := context.WithTimeout(context.Background(), *callTimeout)
 		defer cancel()
 		if err := callSpecificTool(ctx, mcpClient, *callTool, *toolParams, *verbose); err != nil {
 			handleToolCallError(err, *callTool)
@@ -146,7 +151,7 @@ func main() {
 	case *interactive:
 		// Interactive mode manages its own contexts for each tool call
 		// Connection uses background context to stay alive indefinitely
-		if err := interactiveModeWithTimeout(mcpClient, *timeout, *verbose); err != nil {
+		if err := interactiveModeWithTimeout(mcpClient, *callTimeout, *verbose); err != nil {
 			log.Fatalf("Interactive mode failed: %v", err)
 		}
 	default:
@@ -177,16 +182,25 @@ func parseHeaders(headerStr string) map[string]string {
 	return headers
 }
 
-func createSSEClient(serverURL string, headers map[string]string) (*client.Client, error) {
+func createSSEClient(serverURL string, headers map[string]string, callTimeout time.Duration) (*client.Client, error) {
+	// Create custom HTTP client with appropriate timeout for long-running tool calls
+	// Add buffer to account for network overhead
+	httpClient := &http.Client{
+		Timeout: callTimeout + (30 * time.Second),
+	}
+
 	var options []transport.ClientOption
+	options = append(options, transport.WithHTTPClient(httpClient))
 	if len(headers) > 0 {
 		options = append(options, client.WithHeaders(headers))
 	}
 	return client.NewSSEMCPClient(serverURL, options...)
 }
 
-func createHTTPClient(serverURL string, headers map[string]string) (*client.Client, error) {
+func createHTTPClient(serverURL string, headers map[string]string, callTimeout time.Duration) (*client.Client, error) {
 	var options []transport.StreamableHTTPCOption
+	// Set HTTP timeout for tool call execution
+	options = append(options, transport.WithHTTPTimeout(callTimeout))
 	if len(headers) > 0 {
 		options = append(options, transport.WithHTTPHeaders(headers))
 	}
