@@ -4,7 +4,7 @@ This utility is for testing MCP (Model Context Protocol) servers. MCPProbe enume
 
 ## Features
 
-- **Multiple Transport Modes**: Supports both HTTP and SSE (Server-Sent Events) connections
+- **Multiple Transport Modes**: Supports HTTP, SSE (Server-Sent Events), and stdio connections
 - **Initialization Handshake**: Performs proper MCP protocol initialization
 - **Capability Discovery**: Reports on server capabilities (tools, resources, prompts)
 - **Tool Calling**: Execute MCP tools directly from the command line with parameters
@@ -26,16 +26,19 @@ go build -o mcp-probe
 ## Quick Start
 
 ```bash
-# 1. Test server connectivity and see all capabilities
+# 1. Test server connectivity and see all capabilities (SSE)
 ./mcp-probe -url http://localhost:8000/sse
 
-# 2. List available tools
+# 2. Test a local MCP server via stdio
+./mcp-probe -stdio ./my-mcp-server
+
+# 3. List available tools
 ./mcp-probe -url http://localhost:8000/sse -list-only
 
-# 3. Call a specific tool
+# 4. Call a specific tool
 ./mcp-probe -url http://localhost:8000/sse -call "echo" -params '{"message":"Hello MCP!"}'
 
-# 4. Interactive exploration
+# 5. Interactive exploration
 ./mcp-probe -url http://localhost:8000/sse -interactive
 ```
 
@@ -71,8 +74,11 @@ Provides a guided interface for exploring and testing tools.
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `-url` | MCP server URL (required) | - |
-| `-transport` | Transport mode: 'sse' or 'http' | `sse` |
+| `-url` | MCP server URL (required for SSE/HTTP) | - |
+| `-stdio` | Path to local MCP server executable (enables stdio transport) | - |
+| `-args` | Arguments for stdio server (comma-separated) | - |
+| `-env` | Environment variables for stdio server (KEY=VALUE,...) | - |
+| `-transport` | Transport mode: 'sse' or 'http' (for URL-based connections) | `sse` |
 | `-call` | Name of the tool to call | - |
 | `-params` | JSON string of parameters for tool call | `{}` |
 | `-list-only` | Only list available tools | `false` |
@@ -81,6 +87,8 @@ Provides a guided interface for exploring and testing tools.
 | `-timeout` | Connection timeout for initialization and listing | `30s` |
 | `-call-timeout` | Timeout for tool call execution | `300s` (5 minutes) |
 | `-verbose` | Enable verbose output | `true` |
+
+**Note:** Either `-url` or `-stdio` must be provided. The `-headers` and `-transport` options only apply to URL-based connections (SSE/HTTP).
 
 ## Detailed Examples
 
@@ -147,6 +155,35 @@ MCPProbe supports various authentication methods through the `-headers` flag:
 # Test with extended timeout for slow servers
 ./mcp-probe -url http://localhost:8000/sse -timeout 60s
 ```
+
+### Stdio Transport (Local Servers)
+
+The stdio transport allows you to test local MCP servers by spawning them as subprocesses and communicating over stdin/stdout.
+
+```bash
+# Test a local MCP server binary
+./mcp-probe -stdio ./my-mcp-server
+
+# Test with arguments (comma-separated)
+./mcp-probe -stdio python -args "-m,my_mcp_module"
+
+# Test with arguments and environment variables
+./mcp-probe -stdio ./my-server -args "--port,8080,--debug" -env "LOG_LEVEL=debug,API_KEY=secret"
+
+# Interactive mode with a local server
+./mcp-probe -stdio ./my-server -interactive
+
+# Call a specific tool on a local server
+./mcp-probe -stdio ./my-server -call "get_data" -params '{"id": 1}'
+
+# Complex example: local server with auth proxy arguments
+./mcp-probe -stdio ./mcprelay -args "-url,http://127.0.0.1:8888/sse,-headers,{\"Authorization\":\"Bearer YOUR_TOKEN\"}" -verbose
+```
+
+**Stdio-specific options:**
+- `-stdio <path>`: Path to the MCP server executable
+- `-args <args>`: Comma-separated arguments to pass to the server
+- `-env <vars>`: Comma-separated environment variables in KEY=VALUE format
 
 ### Tool Discovery
 

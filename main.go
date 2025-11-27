@@ -24,7 +24,7 @@ import (
 func main() {
 	// Command line flags
 	var (
-		serverURL   = flag.String("url", "", "MCP server URL (required)")
+		serverURL   = flag.String("url", "", "MCP server URL (required for SSE/HTTP)")
 		mode        = flag.String("transport", "sse", "Transport mode: 'sse' or 'http'")
 		headers     = flag.String("headers", "", "HTTP headers in format 'key1:value1,key2:value2'")
 		timeout     = flag.Duration("timeout", 30*time.Second, "Connection timeout for initialization and listing")
@@ -34,14 +34,20 @@ func main() {
 		toolParams  = flag.String("params", "{}", "JSON string of parameters for the tool call")
 		listOnly    = flag.Bool("list-only", false, "Only list available tools, don't test capabilities")
 		interactive = flag.Bool("interactive", false, "Interactive mode for tool calling")
+		stdioCmd    = flag.String("stdio", "", "Path to MCP server executable (enables stdio transport)")
+		stdioArgs   = flag.String("args", "", "Arguments to pass to the stdio server (comma-separated)")
+		stdioEnv    = flag.String("env", "", "Environment variables for stdio server (KEY=VALUE,...)")
 	)
 	flag.Parse()
 
-	if *serverURL == "" {
-		fmt.Println("Error: Server URL is required")
+	// Validate that either stdio or URL is provided
+	if *serverURL == "" && *stdioCmd == "" {
+		fmt.Println("Error: Either -url or -stdio is required")
 		fmt.Println("Usage:")
-		fmt.Println("  Test MCP server capabilities:")
+		fmt.Println("  Test MCP server capabilities (SSE/HTTP):")
 		fmt.Println("    go run main.go -url <server-url> [-transport sse|http] [-timeout 30s]")
+		fmt.Println("  Test MCP server capabilities (stdio):")
+		fmt.Println("    go run main.go -stdio ./my-server [-args \"arg1,arg2\"] [-env \"KEY=VALUE,...\"]")
 		fmt.Println("  List available tools only:")
 		fmt.Println("    go run main.go -url <server-url> -list-only")
 		fmt.Println("  Call a specific tool:")
@@ -60,32 +66,52 @@ func main() {
 	}
 
 	fmt.Printf("=== MCP Server Test Tool ===\n")
-	fmt.Printf("Server URL: %s\n", *serverURL)
-
-	fmt.Printf("Transport: %s\n", *mode)
-	fmt.Printf("Timeout: %s\n", *timeout)
-	fmt.Println()
-
-	// Parse headers
-	headerMap := parseHeaders(*headers)
-	if len(headerMap) > 0 && *verbose {
-		fmt.Printf("Headers: %v\n", headerMap)
-	}
 
 	// Create client based on transport type
 	var mcpClient *client.Client
 	var err error
+	var isStdio bool
 
-	switch strings.ToLower(*mode) {
-	case "sse":
-		fmt.Println("Creating SSE client...")
-		mcpClient, err = createSSEClient(*serverURL, headerMap, *callTimeout)
-	case "http":
-		fmt.Println("Creating HTTP client...")
-		mcpClient, err = createHTTPClient(*serverURL, headerMap, *callTimeout)
-	default:
-		fmt.Printf("Error: Unsupported transport type '%s'. Use 'sse' or 'http'\n", *mode)
-		os.Exit(1)
+	// Check if stdio mode is enabled
+	if *stdioCmd != "" {
+		isStdio = true
+		fmt.Printf("Transport: stdio\n")
+		fmt.Printf("Command: %s\n", *stdioCmd)
+		if *stdioArgs != "" {
+			fmt.Printf("Arguments: %s\n", *stdioArgs)
+		}
+		if *stdioEnv != "" {
+			fmt.Printf("Environment: %s\n", *stdioEnv)
+		}
+		fmt.Printf("Timeout: %s\n", *timeout)
+		fmt.Println()
+
+		fmt.Println("Creating stdio client...")
+		mcpClient, err = createStdioClient(*stdioCmd, *stdioArgs, *stdioEnv)
+	} else {
+		isStdio = false
+		fmt.Printf("Server URL: %s\n", *serverURL)
+		fmt.Printf("Transport: %s\n", *mode)
+		fmt.Printf("Timeout: %s\n", *timeout)
+		fmt.Println()
+
+		// Parse headers
+		headerMap := parseHeaders(*headers)
+		if len(headerMap) > 0 && *verbose {
+			fmt.Printf("Headers: %v\n", headerMap)
+		}
+
+		switch strings.ToLower(*mode) {
+		case "sse":
+			fmt.Println("Creating SSE client...")
+			mcpClient, err = createSSEClient(*serverURL, headerMap, *callTimeout)
+		case "http":
+			fmt.Println("Creating HTTP client...")
+			mcpClient, err = createHTTPClient(*serverURL, headerMap, *callTimeout)
+		default:
+			fmt.Printf("Error: Unsupported transport type '%s'. Use 'sse' or 'http'\n", *mode)
+			os.Exit(1)
+		}
 	}
 
 	if err != nil {
@@ -97,11 +123,16 @@ func main() {
 
 	// Start the client connection with background context
 	// The SSE/HTTP stream needs to stay alive for the duration of tool calls
-	fmt.Println("Starting client connection...")
-	if err := mcpClient.Start(context.Background()); err != nil {
-		log.Fatalf("Failed to start client: %v", err)
+	// Note: stdio clients are auto-started by the library, so we skip this step for them
+	if !isStdio {
+		fmt.Println("Starting client connection...")
+		if err := mcpClient.Start(context.Background()); err != nil {
+			log.Fatalf("Failed to start client: %v", err)
+		}
+		fmt.Println("Client connection started successfully")
+	} else {
+		fmt.Println("Stdio client started automatically")
 	}
-	fmt.Println("Client connection started successfully")
 
 	// Display POST URL for SSE connections
 	if strings.ToLower(*mode) == "sse" {
@@ -194,6 +225,34 @@ func createHTTPClient(serverURL string, headers map[string]string, callTimeout t
 		options = append(options, transport.WithHTTPHeaders(headers))
 	}
 	return client.NewStreamableHttpClient(serverURL, options...)
+}
+
+func createStdioClient(command, argsStr, envStr string) (*client.Client, error) {
+	// Parse arguments (comma-separated)
+	var args []string
+	if argsStr != "" {
+		args = strings.Split(argsStr, ",")
+		// Trim whitespace from each argument
+		for i, arg := range args {
+			args[i] = strings.TrimSpace(arg)
+		}
+	}
+
+	// Parse environment variables (comma-separated KEY=VALUE pairs)
+	var env []string
+	if envStr != "" {
+		envPairs := strings.Split(envStr, ",")
+		for _, pair := range envPairs {
+			trimmed := strings.TrimSpace(pair)
+			if trimmed != "" {
+				env = append(env, trimmed)
+			}
+		}
+	}
+
+	// Create stdio client using the mcp-go library
+	// The library auto-starts stdio clients, so no need to call Start() later
+	return client.NewStdioMCPClient(command, env, args...)
 }
 
 func performInitialization(ctx context.Context, mcpClient *client.Client, verbose bool) error {
