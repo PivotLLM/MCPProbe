@@ -184,6 +184,11 @@ func main() {
 	}
 
 	fmt.Println("\n=== Finished ===")
+
+	// For stdio transport, exit immediately to avoid blocking on subprocess cleanup
+	if isStdio {
+		os.Exit(0)
+	}
 }
 
 func parseHeaders(headerStr string) map[string]string {
