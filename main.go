@@ -21,6 +21,11 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
+const (
+	ProgName = "MCPProbe"
+	ProgVer  = "1.1.0"
+)
+
 func main() {
 	// Command line flags
 	var (
@@ -283,8 +288,8 @@ func performInitialization(ctx context.Context, mcpClient *client.Client, verbos
 				Sampling: &struct{}{},
 			},
 			ClientInfo: mcp.Implementation{
-				Name:    "MCPTest",
-				Version: "1.0.0",
+				Name:    ProgName,
+				Version: ProgVer,
 			},
 		},
 	}
@@ -427,6 +432,7 @@ func formatToolInputSchema(schema mcp.ToolInputSchema, indent string) string {
 	return result.String()
 }
 
+//goland:noinspection GoPrintFunctions
 func testTools(ctx context.Context, mcpClient *client.Client, verbose bool) error {
 	fmt.Println("Requesting list of available tools...")
 
@@ -458,6 +464,7 @@ func testTools(ctx context.Context, mcpClient *client.Client, verbose bool) erro
 	return nil
 }
 
+//goland:noinspection GoPrintFunctions,GoPrintFunctions
 func testResources(ctx context.Context, mcpClient *client.Client, verbose bool) error {
 	fmt.Println("Requesting list of available resources...")
 
@@ -536,6 +543,7 @@ func testResources(ctx context.Context, mcpClient *client.Client, verbose bool) 
 	return nil
 }
 
+//goland:noinspection GoPrintFunctions,GoPrintFunctions
 func testPrompts(ctx context.Context, mcpClient *client.Client, verbose bool) error {
 	fmt.Println("Requesting list of available prompts...")
 

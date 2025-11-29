@@ -81,22 +81,22 @@ Provides a guided interface for exploring and testing tools.
 
 ## Command-Line Options
 
-| Option | Description | Default |
-|--------|-------------|---------|
-| `-url` | MCP server URL (required for SSE/HTTP) | - |
-| `-stdio` | Path to local MCP server executable (enables stdio transport) | - |
-| `-args` | Arguments for stdio server (comma-separated) | - |
-| `-env` | Environment variables for stdio server (KEY=VALUE,...) | - |
-| `-transport` | Transport mode: 'sse' or 'http' (for URL-based connections) | `sse` |
-| `-call` | Name of the tool to call | - |
-| `-params` | JSON string of parameters for tool call | `{}` |
-| `-list` | List tool names only (minimal output) | `false` |
-| `-list-only` | List available tools with details | `false` |
-| `-interactive` | Enable interactive mode | `false` |
-| `-headers` | Custom HTTP headers for authentication and other purposes. Format: 'key1:value1,key2:value2'. Common uses: 'Authorization:Bearer TOKEN' for bearer tokens, 'X-API-Key:KEY' for API keys | - |
-| `-timeout` | Connection timeout for initialization and listing | `30s` |
-| `-call-timeout` | Timeout for tool call execution | `300s` (5 minutes) |
-| `-verbose` | Enable verbose output | `true` |
+| Option          | Description                                                                                                                                                                             | Default            |
+|-----------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------|
+| `-url`          | MCP server URL (required for SSE/HTTP)                                                                                                                                                  | -                  |
+| `-stdio`        | Path to local MCP server executable (enables stdio transport)                                                                                                                           | -                  |
+| `-args`         | Arguments for stdio server (comma-separated)                                                                                                                                            | -                  |
+| `-env`          | Environment variables for stdio server (KEY=VALUE,...)                                                                                                                                  | -                  |
+| `-transport`    | Transport mode: 'sse' or 'http' (for URL-based connections)                                                                                                                             | `sse`              |
+| `-call`         | Name of the tool to call                                                                                                                                                                | -                  |
+| `-params`       | JSON string of parameters for tool call                                                                                                                                                 | `{}`               |
+| `-list`         | List tool names only (minimal output)                                                                                                                                                   | `false`            |
+| `-list-only`    | List available tools with details                                                                                                                                                       | `false`            |
+| `-interactive`  | Enable interactive mode                                                                                                                                                                 | `false`            |
+| `-headers`      | Custom HTTP headers for authentication and other purposes. Format: 'key1:value1,key2:value2'. Common uses: 'Authorization:Bearer TOKEN' for bearer tokens, 'X-API-Key:KEY' for API keys | -                  |
+| `-timeout`      | Connection timeout for initialization and listing                                                                                                                                       | `30s`              |
+| `-call-timeout` | Timeout for tool call execution                                                                                                                                                         | `300s` (5 minutes) |
+| `-verbose`      | Enable verbose output                                                                                                                                                                   | `true`             |
 
 **Note:** Either `-url` or `-stdio` must be provided. The `-headers` and `-transport` options only apply to URL-based connections (SSE/HTTP).
 
