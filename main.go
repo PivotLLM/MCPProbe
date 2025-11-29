@@ -33,6 +33,7 @@ func main() {
 		callTool    = flag.String("call", "", "Name of the tool to call")
 		toolParams  = flag.String("params", "{}", "JSON string of parameters for the tool call")
 		listOnly    = flag.Bool("list-only", false, "Only list available tools, don't test capabilities")
+		list        = flag.Bool("list", false, "List tool names only (minimal output)")
 		interactive = flag.Bool("interactive", false, "Interactive mode for tool calling")
 		stdioCmd    = flag.String("stdio", "", "Path to MCP server executable (enables stdio transport)")
 		stdioArgs   = flag.String("args", "", "Arguments to pass to the stdio server (comma-separated)")
@@ -48,7 +49,9 @@ func main() {
 		fmt.Println("    go run main.go -url <server-url> [-transport sse|http] [-timeout 30s]")
 		fmt.Println("  Test MCP server capabilities (stdio):")
 		fmt.Println("    go run main.go -stdio ./my-server [-args \"arg1,arg2\"] [-env \"KEY=VALUE,...\"]")
-		fmt.Println("  List available tools only:")
+		fmt.Println("  List tool names only (minimal output):")
+		fmt.Println("    go run main.go -url <server-url> -list")
+		fmt.Println("  List available tools with details:")
 		fmt.Println("    go run main.go -url <server-url> -list-only")
 		fmt.Println("  Call a specific tool:")
 		fmt.Println("    go run main.go -url <server-url> -call <tool-name> -params '<json>' [-call-timeout 300s]")
@@ -155,6 +158,12 @@ func main() {
 
 	// Handle different execution modes with appropriate context management
 	switch {
+	case *list:
+		ctx, cancel := context.WithTimeout(context.Background(), *timeout)
+		defer cancel()
+		if err := listToolsMinimal(ctx, mcpClient); err != nil {
+			log.Fatalf("Failed to list tools: %v", err)
+		}
 	case *listOnly:
 		ctx, cancel := context.WithTimeout(context.Background(), *timeout)
 		defer cancel()
@@ -430,7 +439,7 @@ func testTools(ctx context.Context, mcpClient *client.Client, verbose bool) erro
 	fmt.Printf("Found %d tools:\n\n", len(toolsResult.Tools))
 
 	for i, tool := range toolsResult.Tools {
-		fmt.Printf("  %d. %s\n", i+1, tool.Name)
+		fmt.Printf("  %02d: %s\n", i+1, tool.Name)
 		if verbose {
 			if tool.Description != "" {
 				fmt.Printf("     Description: %s\n", tool.Description)
@@ -461,7 +470,7 @@ func testResources(ctx context.Context, mcpClient *client.Client, verbose bool) 
 	fmt.Printf("Found %d resources:\n\n", len(resourcesResult.Resources))
 
 	for i, resource := range resourcesResult.Resources {
-		fmt.Printf("  %d. %s\n", i+1, resource.URI)
+		fmt.Printf("  %02d: %s\n", i+1, resource.URI)
 		if verbose {
 			if resource.Name != "" {
 				fmt.Printf("     Name: %s\n", resource.Name)
@@ -506,7 +515,7 @@ func testResources(ctx context.Context, mcpClient *client.Client, verbose bool) 
 			templateStr = "(empty template)"
 		}
 
-		fmt.Printf("  %d. %s\n", i+1, templateStr)
+		fmt.Printf("  %02d: %s\n", i+1, templateStr)
 		if verbose {
 			if template.Name != "" {
 				fmt.Printf("     Name: %s\n", template.Name)
@@ -539,7 +548,7 @@ func testPrompts(ctx context.Context, mcpClient *client.Client, verbose bool) er
 	fmt.Printf("Found %d prompts:\n\n", len(promptsResult.Prompts))
 
 	for i, prompt := range promptsResult.Prompts {
-		fmt.Printf("  %d. %s\n", i+1, prompt.Name)
+		fmt.Printf("  %02d: %s\n", i+1, prompt.Name)
 		if verbose {
 			if prompt.Description != "" {
 				fmt.Printf("     Description: %s\n", prompt.Description)
@@ -733,7 +742,7 @@ func listToolsOnly(ctx context.Context, mcpClient *client.Client, verbose bool) 
 	fmt.Printf("\nFound %d tools:\n\n", len(toolsResult.Tools))
 
 	for i, tool := range toolsResult.Tools {
-		fmt.Printf("%d. %s", i+1, tool.Name)
+		fmt.Printf("%02d: %s", i+1, tool.Name)
 		if tool.Description != "" && verbose {
 			fmt.Printf(" - %s", tool.Description)
 		}
@@ -756,6 +765,28 @@ func listToolsOnly(ctx context.Context, mcpClient *client.Client, verbose bool) 
 
 	if len(toolsResult.Tools) == 0 {
 		fmt.Println("  (No tools available)")
+	}
+
+	return nil
+}
+
+// listToolsMinimal lists tool names only with minimal output
+func listToolsMinimal(ctx context.Context, mcpClient *client.Client) error {
+	// Check if tools capability is supported
+	serverCaps := mcpClient.GetServerCapabilities()
+	if serverCaps.Tools == nil {
+		fmt.Println("Tools capability not supported by server")
+		return nil
+	}
+
+	toolsRequest := mcp.ListToolsRequest{}
+	toolsResult, err := mcpClient.ListTools(ctx, toolsRequest)
+	if err != nil {
+		return fmt.Errorf("failed to list tools: %w", err)
+	}
+
+	for i, tool := range toolsResult.Tools {
+		fmt.Printf("%02d: %s\n", i+1, tool.Name)
 	}
 
 	return nil
@@ -868,7 +899,7 @@ func printInteractiveHelp() {
 func listToolsInteractive(tools []mcp.Tool) {
 	fmt.Printf("\nAvailable tools (%d):\n", len(tools))
 	for i, tool := range tools {
-		fmt.Printf("  %d. %s", i+1, tool.Name)
+		fmt.Printf("  %02d: %s", i+1, tool.Name)
 		if tool.Description != "" {
 			fmt.Printf(" - %s", tool.Description)
 		}

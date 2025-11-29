@@ -32,19 +32,22 @@ go build -o mcp-probe
 # 2. Test a local MCP server via stdio
 ./mcp-probe -stdio ./my-mcp-server
 
-# 3. List available tools
+# 3. List tool names only (minimal output)
+./mcp-probe -url http://localhost:8000/sse -list
+
+# 4. List available tools with details
 ./mcp-probe -url http://localhost:8000/sse -list-only
 
-# 4. Call a specific tool
+# 5. Call a specific tool
 ./mcp-probe -url http://localhost:8000/sse -call "echo" -params '{"message":"Hello MCP!"}'
 
-# 5. Interactive exploration
+# 6. Interactive exploration
 ./mcp-probe -url http://localhost:8000/sse -interactive
 ```
 
 ## Usage Modes
 
-MCPProbe operates in four modes:
+MCPProbe operates in five modes:
 
 ### 1. Discovery Mode (Default)
 Tests the MCP server and reports all capabilities (tools, resources, prompts).
@@ -52,19 +55,25 @@ Tests the MCP server and reports all capabilities (tools, resources, prompts).
 ./mcp-probe -url <server-url>
 ```
 
-### 2. List-Only Mode
-Quickly lists available tools:
+### 2. List Mode (Minimal)
+Lists tool names only with minimal output:
+```bash
+./mcp-probe -url <server-url> -list
+```
+
+### 3. List-Only Mode (Detailed)
+Lists available tools with descriptions and schemas:
 ```bash
 ./mcp-probe -url <server-url> -list-only
 ```
 
-### 3. Direct Tool Calling Mode
+### 4. Direct Tool Calling Mode
 Executes a specific tool with provided parameters.
 ```bash
 ./mcp-probe -url <server-url> -call <tool-name> -params '<json>'
 ```
 
-### 4. Interactive Mode
+### 5. Interactive Mode
 Provides a guided interface for exploring and testing tools.
 ```bash
 ./mcp-probe -url <server-url> -interactive
@@ -81,7 +90,8 @@ Provides a guided interface for exploring and testing tools.
 | `-transport` | Transport mode: 'sse' or 'http' (for URL-based connections) | `sse` |
 | `-call` | Name of the tool to call | - |
 | `-params` | JSON string of parameters for tool call | `{}` |
-| `-list-only` | Only list available tools | `false` |
+| `-list` | List tool names only (minimal output) | `false` |
+| `-list-only` | List available tools with details | `false` |
 | `-interactive` | Enable interactive mode | `false` |
 | `-headers` | Custom HTTP headers for authentication and other purposes. Format: 'key1:value1,key2:value2'. Common uses: 'Authorization:Bearer TOKEN' for bearer tokens, 'X-API-Key:KEY' for API keys | - |
 | `-timeout` | Connection timeout for initialization and listing | `30s` |
@@ -188,6 +198,9 @@ The stdio transport allows you to test local MCP servers by spawning them as sub
 ### Tool Discovery
 
 ```bash
+# List tool names only (minimal output)
+./mcp-probe -url http://localhost:8000/sse -list
+
 # List all available tools with descriptions
 ./mcp-probe -url http://localhost:8000/sse -list-only
 
