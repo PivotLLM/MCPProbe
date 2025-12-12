@@ -15,7 +15,6 @@ private/
 *.log
 *.sh
 .claude
-CLAUDE.md
 mcpprobe
 MCPProbe
 mcp-probe
