@@ -432,6 +432,29 @@ func formatToolInputSchema(schema mcp.ToolInputSchema, indent string) string {
 	return result.String()
 }
 
+// formatToolAnnotations formats tool annotations as a human-readable string
+func formatToolAnnotations(annotations mcp.ToolAnnotation) string {
+	var flags []string
+
+	if annotations.ReadOnlyHint != nil && *annotations.ReadOnlyHint {
+		flags = append(flags, "read-only")
+	}
+	if annotations.DestructiveHint != nil && *annotations.DestructiveHint {
+		flags = append(flags, "destructive")
+	}
+	if annotations.IdempotentHint != nil && *annotations.IdempotentHint {
+		flags = append(flags, "idempotent")
+	}
+	if annotations.OpenWorldHint != nil && *annotations.OpenWorldHint {
+		flags = append(flags, "open-world")
+	}
+
+	if len(flags) == 0 {
+		return ""
+	}
+	return "[" + strings.Join(flags, ", ") + "]"
+}
+
 //goland:noinspection GoPrintFunctions
 func testTools(ctx context.Context, mcpClient *client.Client, verbose bool) error {
 	fmt.Println("Requesting list of available tools...")
@@ -445,7 +468,12 @@ func testTools(ctx context.Context, mcpClient *client.Client, verbose bool) erro
 	fmt.Printf("Found %d tools:\n\n", len(toolsResult.Tools))
 
 	for i, tool := range toolsResult.Tools {
-		fmt.Printf("  %02d: %s\n", i+1, tool.Name)
+		annotationsStr := formatToolAnnotations(tool.Annotations)
+		if annotationsStr != "" {
+			fmt.Printf("  %02d: %s %s\n", i+1, tool.Name, annotationsStr)
+		} else {
+			fmt.Printf("  %02d: %s\n", i+1, tool.Name)
+		}
 		if verbose {
 			if tool.Description != "" {
 				fmt.Printf("     Description: %s\n", tool.Description)
@@ -458,7 +486,7 @@ func testTools(ctx context.Context, mcpClient *client.Client, verbose bool) erro
 	}
 
 	if len(toolsResult.Tools) == 0 {
-		fmt.Println("  (No tools available)\n")
+		fmt.Println("  (No tools available)")
 	}
 
 	return nil
@@ -492,7 +520,7 @@ func testResources(ctx context.Context, mcpClient *client.Client, verbose bool) 
 	}
 
 	if len(resourcesResult.Resources) == 0 {
-		fmt.Println("  (No resources available)\n")
+		fmt.Println("  (No resources available)")
 	}
 
 	// Also test resource templates if available
@@ -537,7 +565,7 @@ func testResources(ctx context.Context, mcpClient *client.Client, verbose bool) 
 	}
 
 	if len(templatesResult.ResourceTemplates) == 0 {
-		fmt.Println("  (No resource templates available)\n")
+		fmt.Println("  (No resource templates available)")
 	}
 
 	return nil
@@ -571,14 +599,14 @@ func testPrompts(ctx context.Context, mcpClient *client.Client, verbose bool) er
 					if arg.Required {
 						fmt.Printf(" (required)")
 					}
-					fmt.Println("\n")
+					fmt.Println()
 				}
 			}
 		}
 	}
 
 	if len(promptsResult.Prompts) == 0 {
-		fmt.Println("  (No prompts available)\n")
+		fmt.Println("  (No prompts available)")
 	}
 
 	return nil
@@ -750,7 +778,11 @@ func listToolsOnly(ctx context.Context, mcpClient *client.Client, verbose bool) 
 	fmt.Printf("\nFound %d tools:\n\n", len(toolsResult.Tools))
 
 	for i, tool := range toolsResult.Tools {
+		annotationsStr := formatToolAnnotations(tool.Annotations)
 		fmt.Printf("%02d: %s", i+1, tool.Name)
+		if annotationsStr != "" {
+			fmt.Printf(" %s", annotationsStr)
+		}
 		if tool.Description != "" && verbose {
 			fmt.Printf(" - %s", tool.Description)
 		}
@@ -794,7 +826,12 @@ func listToolsMinimal(ctx context.Context, mcpClient *client.Client) error {
 	}
 
 	for i, tool := range toolsResult.Tools {
-		fmt.Printf("%02d: %s\n", i+1, tool.Name)
+		annotationsStr := formatToolAnnotations(tool.Annotations)
+		if annotationsStr != "" {
+			fmt.Printf("%02d: %s %s\n", i+1, tool.Name, annotationsStr)
+		} else {
+			fmt.Printf("%02d: %s\n", i+1, tool.Name)
+		}
 	}
 
 	return nil
@@ -907,7 +944,11 @@ func printInteractiveHelp() {
 func listToolsInteractive(tools []mcp.Tool) {
 	fmt.Printf("\nAvailable tools (%d):\n", len(tools))
 	for i, tool := range tools {
+		annotationsStr := formatToolAnnotations(tool.Annotations)
 		fmt.Printf("  %02d: %s", i+1, tool.Name)
+		if annotationsStr != "" {
+			fmt.Printf(" %s", annotationsStr)
+		}
 		if tool.Description != "" {
 			fmt.Printf(" - %s", tool.Description)
 		}

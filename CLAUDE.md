@@ -10,7 +10,7 @@ MCPProbe is a command-line utility for testing MCP (Model Context Protocol) serv
 
 ```bash
 # Build the application
-go build -o mcp-probe
+go build -o probe
 
 # Format code (required before committing)
 gofmt -w .
@@ -57,4 +57,4 @@ The codebase is a single-file Go application (`main.go`) with the following key 
 ## Common Issues
 
 1. **Redundant newlines**: `go vet` will flag `fmt.Println("\n")` - use `fmt.Println()` instead
-2. **Build artifacts**: Clean up `mcp-probe` and `probe` binaries when needed
+2. **Build artifacts**: Clean up `probe` binary when needed (legacy `mcp-probe` may also exist)
