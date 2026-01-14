@@ -9,17 +9,100 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/mark3labs/mcp-go/util"
 )
+
+// debugLogger implements util.Logger for debug output
+type debugLogger struct{}
+
+func (d *debugLogger) Infof(format string, v ...any) {
+	fmt.Printf("[DEBUG] "+format+"\n", v...)
+}
+
+func (d *debugLogger) Errorf(format string, v ...any) {
+	fmt.Printf("[DEBUG ERROR] "+format+"\n", v...)
+}
+
+// loggingReader wraps an io.Reader and logs all data read
+type loggingReader struct {
+	reader io.Reader
+	prefix string
+	mu     sync.Mutex
+}
+
+func newLoggingReader(r io.Reader, prefix string) *loggingReader {
+	return &loggingReader{reader: r, prefix: prefix}
+}
+
+func (l *loggingReader) Read(p []byte) (n int, err error) {
+	n, err = l.reader.Read(p)
+	if n > 0 {
+		l.mu.Lock()
+		fmt.Printf("[%s] %s\n", l.prefix, strings.TrimSpace(string(p[:n])))
+		l.mu.Unlock()
+	}
+	return n, err
+}
+
+// loggingWriteCloser wraps an io.WriteCloser and logs all data written
+type loggingWriteCloser struct {
+	writer io.WriteCloser
+	prefix string
+	mu     sync.Mutex
+}
+
+func newLoggingWriteCloser(w io.WriteCloser, prefix string) *loggingWriteCloser {
+	return &loggingWriteCloser{writer: w, prefix: prefix}
+}
+
+func (l *loggingWriteCloser) Write(p []byte) (n int, err error) {
+	l.mu.Lock()
+	fmt.Printf("[%s] %s\n", l.prefix, strings.TrimSpace(string(p)))
+	l.mu.Unlock()
+	return l.writer.Write(p)
+}
+
+func (l *loggingWriteCloser) Close() error {
+	return l.writer.Close()
+}
+
+// loggingReadCloser wraps an io.ReadCloser and logs all data read
+type loggingReadCloser struct {
+	reader io.ReadCloser
+	prefix string
+	mu     sync.Mutex
+}
+
+func newLoggingReadCloser(r io.ReadCloser, prefix string) *loggingReadCloser {
+	return &loggingReadCloser{reader: r, prefix: prefix}
+}
+
+func (l *loggingReadCloser) Read(p []byte) (n int, err error) {
+	n, err = l.reader.Read(p)
+	if n > 0 {
+		l.mu.Lock()
+		fmt.Printf("[%s] %s\n", l.prefix, strings.TrimSpace(string(p[:n])))
+		l.mu.Unlock()
+	}
+	return n, err
+}
+
+func (l *loggingReadCloser) Close() error {
+	return l.reader.Close()
+}
 
 const (
 	ProgName = "MCPProbe"
@@ -35,6 +118,7 @@ func main() {
 		timeout     = flag.Duration("timeout", 30*time.Second, "Connection timeout for initialization and listing")
 		callTimeout = flag.Duration("call-timeout", 300*time.Second, "Timeout for tool call execution")
 		verbose     = flag.Bool("verbose", true, "Enable verbose output")
+		debug       = flag.Bool("debug", false, "Enable debug output showing raw MCP messages")
 		callTool    = flag.String("call", "", "Name of the tool to call")
 		toolParams  = flag.String("params", "{}", "JSON string of parameters for the tool call")
 		listOnly    = flag.Bool("list-only", false, "Only list available tools, don't test capabilities")
@@ -80,6 +164,13 @@ func main() {
 	var err error
 	var isStdio bool
 
+	// Create debug logger if enabled (for SSE/HTTP transports)
+	var logger util.Logger
+	if *debug {
+		logger = &debugLogger{}
+		fmt.Println("[DEBUG MODE ENABLED]")
+	}
+
 	// Check if stdio mode is enabled
 	if *stdioCmd != "" {
 		isStdio = true
@@ -95,7 +186,7 @@ func main() {
 		fmt.Println()
 
 		fmt.Println("Creating stdio client...")
-		mcpClient, err = createStdioClient(*stdioCmd, *stdioArgs, *stdioEnv)
+		mcpClient, err = createStdioClient(*stdioCmd, *stdioArgs, *stdioEnv, *debug)
 	} else {
 		isStdio = false
 		fmt.Printf("Server URL: %s\n", *serverURL)
@@ -112,10 +203,10 @@ func main() {
 		switch strings.ToLower(*mode) {
 		case "sse":
 			fmt.Println("Creating SSE client...")
-			mcpClient, err = createSSEClient(*serverURL, headerMap, *callTimeout)
+			mcpClient, err = createSSEClient(*serverURL, headerMap, *callTimeout, logger)
 		case "http":
 			fmt.Println("Creating HTTP client...")
-			mcpClient, err = createHTTPClient(*serverURL, headerMap, *callTimeout)
+			mcpClient, err = createHTTPClient(*serverURL, headerMap, *callTimeout, logger)
 		default:
 			fmt.Printf("Error: Unsupported transport type '%s'. Use 'sse' or 'http'\n", *mode)
 			os.Exit(1)
@@ -131,8 +222,10 @@ func main() {
 
 	// Start the client connection with background context
 	// The SSE/HTTP stream needs to stay alive for the duration of tool calls
-	// Note: stdio clients are auto-started by the library, so we skip this step for them
-	if !isStdio {
+	// Note: stdio clients created via NewStdioMCPClient are auto-started by the library
+	// But debug mode stdio clients (using NewIO) need manual start
+	needsManualStart := !isStdio || *debug
+	if needsManualStart {
 		fmt.Println("Starting client connection...")
 		if err := mcpClient.Start(context.Background()); err != nil {
 			log.Fatalf("Failed to start client: %v", err)
@@ -221,7 +314,7 @@ func parseHeaders(headerStr string) map[string]string {
 	return headers
 }
 
-func createSSEClient(serverURL string, headers map[string]string, callTimeout time.Duration) (*client.Client, error) {
+func createSSEClient(serverURL string, headers map[string]string, callTimeout time.Duration, logger util.Logger) (*client.Client, error) {
 	// Create custom HTTP client with appropriate timeout for long-running tool calls
 	// Add buffer to account for network overhead
 	httpClient := &http.Client{
@@ -233,20 +326,26 @@ func createSSEClient(serverURL string, headers map[string]string, callTimeout ti
 	if len(headers) > 0 {
 		options = append(options, client.WithHeaders(headers))
 	}
+	if logger != nil {
+		options = append(options, transport.WithSSELogger(logger))
+	}
 	return client.NewSSEMCPClient(serverURL, options...)
 }
 
-func createHTTPClient(serverURL string, headers map[string]string, callTimeout time.Duration) (*client.Client, error) {
+func createHTTPClient(serverURL string, headers map[string]string, callTimeout time.Duration, logger util.Logger) (*client.Client, error) {
 	var options []transport.StreamableHTTPCOption
 	// Set HTTP timeout for tool call execution
 	options = append(options, transport.WithHTTPTimeout(callTimeout))
 	if len(headers) > 0 {
 		options = append(options, transport.WithHTTPHeaders(headers))
 	}
+	if logger != nil {
+		options = append(options, transport.WithHTTPLogger(logger))
+	}
 	return client.NewStreamableHttpClient(serverURL, options...)
 }
 
-func createStdioClient(command, argsStr, envStr string) (*client.Client, error) {
+func createStdioClient(command, argsStr, envStr string, debug bool) (*client.Client, error) {
 	// Parse arguments (comma-separated)
 	var args []string
 	if argsStr != "" {
@@ -269,9 +368,57 @@ func createStdioClient(command, argsStr, envStr string) (*client.Client, error) 
 		}
 	}
 
+	// If debug mode, spawn subprocess manually and wrap I/O streams
+	if debug {
+		return createStdioClientWithDebug(command, env, args)
+	}
+
 	// Create stdio client using the mcp-go library
 	// The library auto-starts stdio clients, so no need to call Start() later
 	return client.NewStdioMCPClient(command, env, args...)
+}
+
+// createStdioClientWithDebug creates a stdio client with debug logging of all JSON-RPC messages
+func createStdioClientWithDebug(command string, env []string, args []string) (*client.Client, error) {
+	// Create the command
+	cmd := exec.Command(command, args...)
+
+	// Set up environment
+	cmd.Env = append(os.Environ(), env...)
+
+	// Get stdin pipe (we write to it)
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create stdin pipe: %w", err)
+	}
+
+	// Get stdout pipe (we read from it)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create stdout pipe: %w", err)
+	}
+
+	// Get stderr pipe for logging
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create stderr pipe: %w", err)
+	}
+
+	// Start the subprocess
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("failed to start subprocess: %w", err)
+	}
+
+	// Wrap streams with logging
+	loggingStdin := newLoggingWriteCloser(stdin, "SEND")
+	loggingStdout := newLoggingReader(stdout, "RECV")
+	loggingStderr := newLoggingReadCloser(stderr, "STDERR")
+
+	// Create transport using NewIO with wrapped streams
+	stdioTransport := transport.NewIO(loggingStdout, loggingStdin, loggingStderr)
+
+	// Create client with the transport
+	return client.NewClient(stdioTransport), nil
 }
 
 func performInitialization(ctx context.Context, mcpClient *client.Client, verbose bool) error {
