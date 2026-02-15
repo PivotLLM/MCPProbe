@@ -516,7 +516,7 @@ Different shells handle quotes differently:
 
 ## Copyright and license
 
-Copyright (c) 2025 by Tenebris Technologies Inc. This software is licensed under the MIT License. Please see LICENSE for details.
+Copyright (c) 2025-2026 by Tenebris Technologies Inc. This software is licensed under the MIT License. Please see LICENSE for details.
 
 ## No Warranty (zilch, none, void, nil, null, "", {}, 0x00, 0b00000000, EOF)
 
