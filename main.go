@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -127,6 +128,8 @@ func main() {
 		stdioCmd    = flag.String("stdio", "", "Path to MCP server executable (enables stdio transport)")
 		stdioArgs   = flag.String("args", "", "Arguments to pass to the stdio server (comma-separated)")
 		stdioEnv    = flag.String("env", "", "Environment variables for stdio server (KEY=VALUE,...)")
+		repeat      = flag.Int("repeat", 1, "Number of times to repeat the tool call (for load testing)")
+		concurrent  = flag.Int("concurrent", 1, "Number of concurrent workers for load testing (use with -repeat)")
 	)
 	flag.Parse()
 
@@ -144,6 +147,8 @@ func main() {
 		fmt.Println("    probe -url <server-url> -list-only")
 		fmt.Println("  Call a specific tool:")
 		fmt.Println("    probe -url <server-url> -call <tool-name> -params '<json>' [-call-timeout 300s]")
+		fmt.Println("  Load testing a tool:")
+		fmt.Println("    probe -url <server-url> -call <tool-name> -params '<json>' -repeat 1000 -concurrent 50")
 		fmt.Println("  Interactive tool calling:")
 		fmt.Println("    probe -url <server-url> -interactive [-call-timeout 300s]")
 		fmt.Println("\nCustom HTTP Headers:")
@@ -154,6 +159,9 @@ func main() {
 		fmt.Println("\nTimeout Options:")
 		fmt.Println("  -timeout:      Connection/initialization timeout (default: 30s)")
 		fmt.Println("  -call-timeout: Tool execution timeout (default: 300s)")
+		fmt.Println("\nLoad Testing Options:")
+		fmt.Println("  -repeat:       Number of times to call the tool (default: 1)")
+		fmt.Println("  -concurrent:   Number of concurrent workers (default: 1)")
 		fmt.Println("\nDebug Options:")
 		fmt.Println("  -debug:        Enable debug output showing raw JSON-RPC messages")
 		os.Exit(1)
@@ -276,11 +284,18 @@ func main() {
 			log.Fatalf("Failed to list tools: %v", err)
 		}
 	case *callTool != "":
-		ctx, cancel := context.WithTimeout(context.Background(), *callTimeout)
-		defer cancel()
-		if err := callSpecificTool(ctx, mcpClient, *callTool, *toolParams, *verbose); err != nil {
-			handleToolCallError(err, *callTool)
-			os.Exit(1)
+		if *repeat > 1 {
+			if err := runLoadTest(mcpClient, *callTool, *toolParams, *repeat, *concurrent, *callTimeout); err != nil {
+				fmt.Fprintf(os.Stderr, "Load test completed with errors: %v\n", err)
+				os.Exit(1)
+			}
+		} else {
+			ctx, cancel := context.WithTimeout(context.Background(), *callTimeout)
+			defer cancel()
+			if err := callSpecificTool(ctx, mcpClient, *callTool, *toolParams, *verbose); err != nil {
+				handleToolCallError(err, *callTool)
+				os.Exit(1)
+			}
 		}
 	case *interactive:
 		// Interactive mode manages its own contexts for each tool call
@@ -303,6 +318,116 @@ func main() {
 	if isStdio {
 		os.Exit(0)
 	}
+}
+
+func runLoadTest(mcpClient *client.Client, toolName string, paramsJSON string, repeat int, concurrent int, callTimeout time.Duration) error {
+	// Parse params once
+	params, err := parseToolParameters(paramsJSON)
+	if err != nil {
+		return err
+	}
+
+	// Cap concurrent workers at repeat count
+	if concurrent > repeat {
+		concurrent = repeat
+	}
+
+	fmt.Printf("\n=== Load Test: %s ===\n", toolName)
+	fmt.Printf("Total calls: %d | Concurrent workers: %d\n\n", repeat, concurrent)
+
+	type result struct {
+		duration time.Duration
+		err      error
+	}
+
+	results := make([]result, repeat)
+	work := make(chan int, repeat)
+
+	// Fill work channel
+	for i := 0; i < repeat; i++ {
+		work <- i
+	}
+	close(work)
+
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	completed := 0
+	startTime := time.Now()
+
+	for w := 0; w < concurrent; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for idx := range work {
+				req := mcp.CallToolRequest{
+					Params: mcp.CallToolParams{
+						Name:      toolName,
+						Arguments: params,
+					},
+				}
+				ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+				t0 := time.Now()
+				_, callErr := mcpClient.CallTool(ctx, req)
+				cancel()
+				dur := time.Since(t0)
+				results[idx] = result{duration: dur, err: callErr}
+
+				mu.Lock()
+				completed++
+				if completed%max(1, repeat/10) == 0 || completed == repeat {
+					fmt.Printf("\r  Progress: %d/%d (%.0f%%)", completed, repeat, float64(completed)/float64(repeat)*100)
+				}
+				mu.Unlock()
+			}
+		}()
+	}
+	wg.Wait()
+	totalDuration := time.Since(startTime)
+	fmt.Println() // newline after progress
+
+	// Compute stats — only include successful call durations in latency percentiles
+	var successes, failures int
+	var successDurations []time.Duration
+	for _, r := range results {
+		if r.err != nil {
+			failures++
+		} else {
+			successes++
+			successDurations = append(successDurations, r.duration)
+		}
+	}
+
+	throughput := float64(repeat) / totalDuration.Seconds()
+
+	fmt.Printf("\n=== Load Test Results ===\n")
+	fmt.Printf("Total calls:  %d (%d succeeded, %d failed)\n", repeat, successes, failures)
+	fmt.Printf("Duration:     %s\n", totalDuration.Round(time.Millisecond))
+	fmt.Printf("Throughput:   %.2f calls/sec\n", throughput)
+
+	if len(successDurations) > 0 {
+		sort.Slice(successDurations, func(i, j int) bool { return successDurations[i] < successDurations[j] })
+
+		var total time.Duration
+		for _, d := range successDurations {
+			total += d
+		}
+		mean := total / time.Duration(len(successDurations))
+		n := len(successDurations)
+		p95 := successDurations[int(float64(n-1)*0.95)]
+		p99 := successDurations[int(float64(n-1)*0.99)]
+
+		fmt.Printf("Latency (successful calls):\n")
+		fmt.Printf("  Min:  %s\n", successDurations[0].Round(time.Microsecond))
+		fmt.Printf("  Mean: %s\n", mean.Round(time.Microsecond))
+		fmt.Printf("  P95:  %s\n", p95.Round(time.Microsecond))
+		fmt.Printf("  P99:  %s\n", p99.Round(time.Microsecond))
+		fmt.Printf("  Max:  %s\n", successDurations[n-1].Round(time.Microsecond))
+	}
+
+	if failures > 0 {
+		return fmt.Errorf("%d/%d calls failed", failures, repeat)
+	}
+	return nil
 }
 
 func parseHeaders(headerStr string) map[string]string {
