@@ -114,7 +114,7 @@ func main() {
 	// Command line flags
 	var (
 		serverURL   = flag.String("url", "", "MCP server URL (required for SSE/HTTP)")
-		mode        = flag.String("transport", "sse", "Transport mode: 'sse' or 'http'")
+		mode        = flag.String("transport", "http", "Transport mode: 'sse' or 'http'")
 		headers     = flag.String("headers", "", "HTTP headers in format 'key1:value1,key2:value2'")
 		timeout     = flag.Duration("timeout", 30*time.Second, "Connection timeout for initialization and listing")
 		callTimeout = flag.Duration("call-timeout", 300*time.Second, "Timeout for tool call execution")
