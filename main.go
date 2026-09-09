@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/exec"
@@ -23,18 +24,13 @@ import (
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/util"
 )
 
-// debugLogger implements util.Logger for debug output
-type debugLogger struct{}
-
-func (d *debugLogger) Infof(format string, v ...any) {
-	fmt.Printf("[DEBUG] "+format+"\n", v...)
-}
-
-func (d *debugLogger) Errorf(format string, v ...any) {
-	fmt.Printf("[DEBUG ERROR] "+format+"\n", v...)
+// newDebugLogger returns a slog logger for MCP transport debug output.
+func newDebugLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+	}))
 }
 
 // loggingReader wraps an io.Reader and logs all data read
@@ -180,9 +176,9 @@ func main() {
 	var isStdio bool
 
 	// Create debug logger if enabled (for SSE/HTTP transports)
-	var logger util.Logger
+	var logger *slog.Logger
 	if *debug {
-		logger = &debugLogger{}
+		logger = newDebugLogger()
 		fmt.Println("[DEBUG MODE ENABLED]")
 	}
 
@@ -446,7 +442,7 @@ func parseHeaders(headerStr string) map[string]string {
 	return headers
 }
 
-func createSSEClient(serverURL string, headers map[string]string, callTimeout time.Duration, logger util.Logger) (*client.Client, error) {
+func createSSEClient(serverURL string, headers map[string]string, callTimeout time.Duration, logger *slog.Logger) (*client.Client, error) {
 	// Create custom HTTP client with appropriate timeout for long-running tool calls
 	// Add buffer to account for network overhead
 	httpClient := &http.Client{
@@ -464,7 +460,7 @@ func createSSEClient(serverURL string, headers map[string]string, callTimeout ti
 	return client.NewSSEMCPClient(serverURL, options...)
 }
 
-func createHTTPClient(serverURL string, headers map[string]string, callTimeout time.Duration, logger util.Logger) (*client.Client, error) {
+func createHTTPClient(serverURL string, headers map[string]string, callTimeout time.Duration, logger *slog.Logger) (*client.Client, error) {
 	var options []transport.StreamableHTTPCOption
 	// Set HTTP timeout for tool call execution
 	options = append(options, transport.WithHTTPTimeout(callTimeout))
@@ -564,7 +560,7 @@ func performInitialization(ctx context.Context, mcpClient *client.Client, verbos
 				}{
 					ListChanged: true,
 				},
-				Sampling: &struct{}{},
+				Sampling: &mcp.SamplingCapability{},
 			},
 			ClientInfo: mcp.Implementation{
 				Name:    ProgName,
